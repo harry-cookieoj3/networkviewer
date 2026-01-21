@@ -3,112 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Viewer</title>
+    <title>Network Debugger</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #f0f0f0; }
-        #cy { width: 100vw; height: 100vh; display: block; }
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-family: sans-serif; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: monospace; }
+        /* デバッグログ表示エリア */
+        #log-panel {
+            position: absolute; top: 0; left: 0; width: 100%; height: 30%;
+            background: rgba(0, 0, 0, 0.85); color: #00ff00;
+            overflow-y: auto; z-index: 1000; font-size: 12px; padding: 10px;
+            border-bottom: 2px solid #555; pointer-events: auto;
+        }
+        /* グラフ表示エリア */
+        #cy { position: absolute; top: 30%; left: 0; width: 100%; height: 70%; background-color: #fff; }
+        .log-entry { margin-bottom: 4px; border-bottom: 1px solid #333; }
+        .log-error { color: #ff4444; font-weight: bold; }
+        .log-success { color: #ffff00; }
     </style>
 </head>
 <body>
-    <div id="loading">ネットワークデータを読み込み中...</div>
+
+    <div id="log-panel">
+        <div class="log-entry">--- DEBUG LOG START ---</div>
+    </div>
     <div id="cy"></div>
 
     <script>
-
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
-        // /gviz/tq 形式を使うことで、ブラウザのセキュリティブロックを回避しやすくなります
-        const NODE_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
-        const EDGE_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
+        const NODE_GID = '0';
+        const EDGE_GID = '1184231939';
 
-        async function fetchData(url) {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error("データの取得に失敗しました");
-            const text = await response.text();
-            // 列名を小文字に統一して読み込み
-            return Papa.parse(text, { header: true, skipEmptyLines: true, transformHeader: h => h.trim().toLowerCase() }).data;
+        function log(msg, isError = false) {
+            const panel = document.getElementById('log-panel');
+            const div = document.createElement('div');
+            div.className = isError ? 'log-entry log-error' : 'log-entry';
+            div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            panel.appendChild(div);
+            panel.scrollTop = panel.scrollHeight;
+            console.log(msg);
+        }
+
+        async function fetchData(url, name) {
+            log(`${name}をリクエスト中... URL: ${url}`);
+            try {
+                const response = await fetch(url);
+                log(`${name}レスポンス受信: ステータス ${response.status}`);
+                if (!response.ok) throw new Error(`HTTPエラー! ステータス: ${response.status}`);
+                
+                const text = await response.text();
+                log(`${name}データ受信完了 (${text.length} 文字)`);
+                
+                const parsed = Papa.parse(text, { 
+                    header: true, 
+                    skipEmptyLines: true, 
+                    transformHeader: h => h.trim().toLowerCase() 
+                });
+                
+                log(`${name}解析完了: ${parsed.data.length} 行検出`);
+                if (parsed.data.length > 0) {
+                    log(`${name} 1行目の項目: ${Object.keys(parsed.data[0]).join(', ')}`, true);
+                }
+                return parsed.data;
+            } catch (e) {
+                log(`${name}エラー: ${e.message}`, true);
+                throw e;
+            }
         }
 
         async function init() {
+            // 前回の /export がダメだった場合を考え、/gviz/tq 形式を使用
+            const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=${NODE_GID}`;
+            const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=${EDGE_GID}`;
+
             try {
                 const [nodesData, edgesData] = await Promise.all([
-                    fetchData(NODE_URL),
-                    fetchData(EDGE_URL)
+                    fetchData(nodeUrl, "ノードシート"),
+                    fetchData(edgeUrl, "エッジシート")
                 ]);
 
-                const elements = { nodes: [], edges: [] };
-
-                // ノード（点）の構築
+                log("Cytoscapeエレメント作成開始...");
+                const elements = [];
+                
                 nodesData.forEach(row => {
                     const id = row.id || row.Id;
                     if (id) {
-                        elements.nodes.push({
-                            data: { 
-                                id: String(id), 
-                                label: row.label || id,
-                                color: row.color || '#1a73e8'
-                            },
-                            // 座標(x,y)があれば反映
-                            position: (row.x && row.y) ? { x: parseFloat(row.x), y: parseFloat(row.y) } : undefined
+                        elements.push({
+                            group: 'nodes',
+                            data: { id: String(id), label: row.label || id }
                         });
                     }
                 });
 
-                // エッジ（線）の構築
                 edgesData.forEach(row => {
                     if (row.source && row.target) {
-                        elements.edges.push({
-                            data: { 
-                                source: String(row.source), 
-                                target: String(row.target) 
-                            }
+                        elements.push({
+                            group: 'edges',
+                            data: { source: String(row.source), target: String(row.target) }
                         });
                     }
                 });
-
-                document.getElementById('loading').style.display = 'none';
+                log(`エレメント合計: ${elements.length} 個 (内ノード: ${nodesData.length}, エッジ: ${edgesData.length})`);
 
                 const cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
-                        {
-                            selector: 'node',
-                            style: {
-                                'label': 'data(label)',
-                                'background-color': 'data(color)',
-                                'width': 12,
-                                'height': 12,
-                                'font-size': '8px',
-                                'text-valign': 'bottom',
-                                'text-margin-y': 2,
-                                'color': '#333'
-                            }
-                        },
-                        {
-                            selector: 'edge',
-                            style: {
-                                'width': 1,
-                                'line-color': '#ccc',
-                                'curve-style': 'haystack',
-                                'opacity': 0.5
-                            }
-                        }
+                        { selector: 'node', style: { 'label': 'data(label)', 'background-color': '#1a73e8', 'width': 10, 'height': 10, 'font-size': '8px' } },
+                        { selector: 'edge', style: { 'width': 1, 'line-color': '#999', 'opacity': 0.4, 'curve-style': 'haystack' } }
                     ],
-                    layout: { 
-                        // 座標がある場合はそのまま配置、なければ自動で並べる
-                        name: (elements.nodes[0] && elements.nodes[0].position) ? 'preset' : 'cose',
-                        fit: true,
-                        padding: 50
-                    }
+                    layout: { name: 'cose', padding: 30 }
                 });
 
+                log("描画プロセス完了", false);
+                document.querySelector('.log-success'); // 成功表示用タグ
+
             } catch (e) {
-                document.getElementById('loading').innerHTML = `<span style="color:red">エラー: ${e.message}</span>`;
+                log("致命的エラー: " + e.message, true);
             }
         }
+
         init();
     </script>
 </body>
