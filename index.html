@@ -71,7 +71,7 @@
             }
         }
 
-        async function init() {
+                async function init() {
             const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=${NODE_GID}`;
             const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=${EDGE_GID}`;
 
@@ -81,9 +81,9 @@
                     fetchData(edgeUrl, "エッジシート")
                 ]);
 
-                log("データ検証中...");
+                log("データ検証 & 色の読み込み中...");
                 const elements = [];
-                const nodeIdSet = new Set(); // 存在するIDをメモする
+                const nodeIdSet = new Set();
 
                 // 1. ノードの登録
                 nodesData.forEach(row => {
@@ -92,19 +92,22 @@
                         const strId = String(id).trim();
                         elements.push({
                             group: 'nodes',
-                            data: { id: strId, label: row.label || id }
+                            data: { 
+                                id: strId, 
+                                label: row.label || id,
+                                // スプレッドシートの color 列（または Color 列）を反映。なければデフォルト青
+                                nodeColor: row.color || row.Color || '#1a73e8'
+                            }
                         });
                         nodeIdSet.add(strId);
                     }
                 });
 
-                // 2. エッジの登録（存在チェック付き）
+                // 2. エッジの登録
                 let ignoreCount = 0;
                 edgesData.forEach(row => {
                     const s = String(row.source || "").trim();
                     const t = String(row.target || "").trim();
-                    
-                    // 両方のIDが存在する場合のみ線を追加
                     if (nodeIdSet.has(s) && nodeIdSet.has(t)) {
                         elements.push({
                             group: 'edges',
@@ -115,9 +118,7 @@
                     }
                 });
 
-                if (ignoreCount > 0) {
-                    log(`警告: 存在しないIDへの接続を ${ignoreCount} 件スキップしました`, true);
-                }
+                if (ignoreCount > 0) log(`警告: 存在しないIDへの接続を ${ignoreCount} 件スキップしました`, true);
 
                 log(`描画開始: ノード数 ${nodeIdSet.size}, エッジ数 ${elements.length - nodeIdSet.size}`);
 
@@ -125,19 +126,57 @@
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
-                        { selector: 'node', style: { 'label': 'data(label)', 'background-color': '#1a73e8', 'width': 10, 'height': 10, 'font-size': '8px' } },
-                        { selector: 'edge', style: { 'width': 1, 'line-color': '#999', 'opacity': 0.4, 'curve-style': 'haystack' } }
+                        {
+                            selector: 'node',
+                            style: {
+                                'label': 'data(label)',
+                                'background-color': 'data(nodeColor)', // 読み込んだ色を反映
+                                'width': 15,
+                                'height': 15,
+                                'font-size': '10px',
+                                'text-valign': 'bottom',
+                                'text-margin-y': 4,
+                                'color': '#333',
+                                'text-wrap': 'wrap',
+                                'text-max-width': '80px'
+                            }
+                        },
+                        {
+                            selector: 'edge',
+                            style: {
+                                'width': 1.2,
+                                'line-color': '#ccc',
+                                'opacity': 0.3,
+                                'curve-style': 'bezier' // 密集対策として線を少しカーブさせる
+                            }
+                        }
                     ],
-                    layout: { name: 'cose', padding: 30, componentSpacing: 50 }
+                    layout: {
+                        name: 'cose',
+                        idealEdgeLength: 100, // 長いほどノード間が広がる（デフォルト32）
+                        nodeOverlap: 20,      // ノード同士の重なり許容
+                        refresh: 20,
+                        fit: true,
+                        padding: 50,
+                        randomize: false,
+                        componentSpacing: 150, // 独立した塊同士の距離
+                        nodeRepulsion: 10000,  // 反発力。大きくするとより広がる
+                        edgeElasticity: 100,
+                        nestingFactor: 5,
+                        gravity: 80,           // 重力。小さくすると外側に広がる
+                        numIter: 1000,
+                        initialTemp: 200,
+                        coolingFactor: 0.95,
+                        minTemp: 1.0
+                    }
                 });
 
-                log("完了！図が表示されているはずです。");
+                log("完了！色とレイアウトを更新しました。");
 
             } catch (e) {
                 log("致命的エラー: " + e.message, true);
             }
         }
-
 
         init();
     </script>
