@@ -3,21 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Viewer - Visible Mode</title>
+    <title>Network Viewer - Full Network</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        /* 画面いっぱいに表示し、余計な余白（スクロールバー）を消す */
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
-        #cy { width: 100vw; height: 100vh; background-color: #ebebeb; } /* 背景を少し暗いグレーに */
-        #debug { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: white; padding: 5px; font-size: 10px; z-index: 100; pointer-events: none; }
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-weight: bold; }
+        #cy { width: 100vw; height: 100vh; background-color: #ffffff; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-family: sans-serif; }
     </style>
 </head>
 <body>
-
-    <div id="loading">読み込み中...</div>
-    <div id="debug"></div>
+    <div id="loading">ネットワークを構築中...</div>
     <div id="cy"></div>
 
     <script>
@@ -25,27 +21,42 @@
         const CSV_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/export?format=csv`;
 
         async function init() {
-            const debug = document.getElementById('debug');
             try {
                 const response = await fetch(CSV_URL + '&t=' + new Date().getTime());
                 const csvText = await response.text();
                 const results = Papa.parse(csvText, { header: true, skipEmptyLines: true });
                 const data = results.data;
 
-                debug.innerText = `データ件数: ${data.length} 件`;
-
                 const elements = [];
+                
                 data.forEach(row => {
-                    const id = row.Id || row.id || row.ID;
-                    const label = row.Label || row.label || row.name || id;
-                    
+                    // ノード（点）の追加
+                    const id = row.Id || row.id;
                     if (id) {
                         elements.push({
+                            group: 'nodes',
                             data: { 
                                 id: String(id), 
-                                label: String(label),
-                                // 白いノードを見えやすくするため、色は強制的に青、縁を黒にする
-                                color: '#1a73e8' 
+                                label: row.Label || row.label || id,
+                                color: row.Color || '#1a73e8'
+                            },
+                            // Gephiの座標を使う（座標が大きすぎる場合は少し縮小します）
+                            position: { 
+                                x: row.x ? parseFloat(row.x) : undefined, 
+                                y: row.y ? parseFloat(row.y) : undefined 
+                            }
+                        });
+                    }
+
+                    // エッジ（線）の追加
+                    const source = row.Source || row.source;
+                    const target = row.Target || row.target;
+                    if (source && target) {
+                        elements.push({
+                            group: 'edges',
+                            data: { 
+                                source: String(source), 
+                                target: String(target) 
                             }
                         });
                     }
@@ -62,31 +73,36 @@
                             style: {
                                 'label': 'data(label)',
                                 'background-color': 'data(color)',
-                                'width': 40,  // ノードを大きく
-                                'height': 40,
-                                'font-size': '14px',
-                                'color': '#000',
+                                'width': 15,
+                                'height': 15,
+                                'font-size': '8px',
                                 'text-valign': 'bottom',
-                                'text-margin-y': 8,
-                                'border-width': 2,
-                                'border-color': '#000' // 黒い縁取り
+                                'text-margin-y': 3,
+                                'color': '#333'
+                            }
+                        },
+                        {
+                            selector: 'edge',
+                            style: {
+                                'width': 0.5,
+                                'line-color': '#ccc',
+                                'curve-style': 'haystack', // 大量の線を表示するのに適したスタイル
+                                'opacity': 0.5
                             }
                         }
                     ],
                     layout: { 
-                        name: 'cose', // 自動配置
-                        padding: 100
+                        // x, y 座標がある場合は 'preset'、ない場合は自動配置
+                        name: (data[0] && data[0].x) ? 'preset' : 'cose',
+                        fit: true,
+                        padding: 50
                     }
                 });
-
-                // 画面に収まるように自動調整
-                cy.fit();
 
             } catch (e) {
                 document.getElementById('loading').innerText = "エラー: " + e.message;
             }
         }
-
         init();
     </script>
 </body>
