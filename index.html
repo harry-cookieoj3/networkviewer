@@ -3,129 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Viewer - Full Data</title>
+    <title>Network Viewer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
         #cy { width: 100vw; height: 100vh; background-color: #ffffff; }
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-family: sans-serif; background: rgba(255,255,255,0.9); padding: 20px; border: 1px solid #ccc; border-radius: 8px; text-align: center; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-family: sans-serif; text-align: center; }
     </style>
 </head>
 <body>
-    <div id="loading">
-        <div>ネットワークを構築中...</div>
-        <div id="progress" style="font-size: 12px; color: #666; margin-top: 5px;"></div>
-    </div>
+    <div id="loading">データを取得中...<br><span id="status"></span></div>
     <div id="cy"></div>
 
     <script>
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
-        const NODE_GID = '0'; 
-        const EDGE_GID = '1184231939'; // ConnectionsシートのGID
-
-        const NODE_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/export?format=csv&gid=${NODE_GID}`;
-        const EDGE_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/export?format=csv&gid=${EDGE_GID}`;
+        // 直接エクスポート用URLを作成
+        const NODE_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/export?format=csv&gid=0`;
+        const EDGE_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/export?format=csv&gid=1184231939`;
 
         async function fetchData(url, name) {
-            document.getElementById('progress').innerText = `${name}を取得中...`;
-            const response = await fetch(url + '&t=' + new Date().getTime());
-            if (!response.ok) throw new Error(`${name}の取得に失敗しました。共有設定を確認してください。`);
+            document.getElementById('status').innerText = name + "...";
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(name + "の取得に失敗。スプレッドシートの共有が「全員」になっているか確認してください。");
             const text = await response.text();
             return Papa.parse(text, { header: true, skipEmptyLines: true, transformHeader: h => h.trim().toLowerCase() }).data;
         }
 
         async function init() {
             try {
-                // 両方のシートを読み込み
                 const [nodesData, edgesData] = await Promise.all([
                     fetchData(NODE_URL, "ノード"),
                     fetchData(EDGE_URL, "エッジ")
                 ]);
 
                 const elements = [];
-                
-                // ノード（点）の追加
                 nodesData.forEach(row => {
-                    const id = row.id || row.Id || row.ID;
+                    const id = row.id || row.Id;
                     if (id) {
                         elements.push({
                             group: 'nodes',
-                            data: { 
-                                id: String(id), 
-                                label: row.label || row.name || id,
-                                color: row.color || '#1a73e8'
-                            },
-                            position: { 
-                                x: row.x ? parseFloat(row.x) : undefined, 
-                                y: row.y ? parseFloat(row.y) : undefined 
-                            }
+                            data: { id: String(id), label: row.label || id, color: row.color || '#1a73e8' },
+                            position: { x: row.x ? parseFloat(row.x) : undefined, y: row.y ? parseFloat(row.y) : undefined }
                         });
                     }
                 });
 
-                // エッジ（線）の追加
                 edgesData.forEach(row => {
-                    const s = row.source || row.Source;
-                    const t = row.target || row.Target;
-                    if (s && t) {
+                    if (row.source && row.target) {
                         elements.push({
                             group: 'edges',
-                            data: { 
-                                source: String(s), 
-                                target: String(t) 
-                            }
+                            data: { source: String(row.source), target: String(row.target) }
                         });
                     }
                 });
 
                 document.getElementById('loading').style.display = 'none';
 
-                const cy = cytoscape({
+                cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
-                        {
-                            selector: 'node',
-                            style: {
-                                'label': 'data(label)',
-                                'background-color': 'data(color)',
-                                'width': 12,
-                                'height': 12,
-                                'font-size': '6px',
-                                'text-valign': 'bottom',
-                                'text-margin-y': 2,
-                                'color': '#333',
-                                'z-index': 10
-                            }
-                        },
-                        {
-                            selector: 'edge',
-                            style: {
-                                'width': 0.8,
-                                'line-color': '#ddd',
-                                'curve-style': 'haystack',
-                                'opacity': 0.6
-                            }
-                        }
+                        { selector: 'node', style: { 'label': 'data(label)', 'background-color': 'data(color)', 'width': 12, 'height': 12, 'font-size': '8px', 'text-valign': 'bottom', 'color': '#333' } },
+                        { selector: 'edge', style: { 'width': 0.8, 'line-color': '#ddd', 'curve-style': 'haystack', 'opacity': 0.6 } }
                     ],
-                    layout: { 
-                        // x, y 座標がある場合はそれを使用（Gephi配置）、なければ自動配置
-                        name: (nodesData[0] && (nodesData[0].x || nodesData[0].X)) ? 'preset' : 'cose',
-                        fit: true,
-                        padding: 30
-                    },
-                    wheelSensitivity: 0.2
+                    layout: { name: (nodesData[0] && nodesData[0].x) ? 'preset' : 'cose', fit: true, padding: 30 }
                 });
-
-                // クリックしたときにノードを強調するおまけ機能
-                cy.on('tap', 'node', function(evt){
-                    const node = evt.target;
-                    console.log('clicked ' + node.id());
-                });
-
             } catch (e) {
-                document.getElementById('loading').innerHTML = `<div style="color:red">エラーが発生しました</div><div style="font-size:12px">${e.message}</div>`;
+                document.getElementById('loading').innerHTML = `<div style="color:red">エラー: ${e.message}</div>`;
             }
         }
         init();
