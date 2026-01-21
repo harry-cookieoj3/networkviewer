@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Network Viewer - Interactive Focus</title>
+    <title>Network Viewer - Focus 2nd Degree</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
@@ -33,7 +33,7 @@
         
         const CONFIG = {
             scale: 1.0,
-            baseNodeSize: 150, // Size値に掛ける倍率 (Size 20なら 3000px)
+            baseNodeSize: 150, 
             baseFontSize: 1000,
             edgeWidth: 25,
             defaultColor: '#1a73e8',
@@ -44,7 +44,7 @@
 
         async function start() {
             try {
-                addLog("高機能版をロード中...");
+                addLog("2階層強調・ドラッグ禁止版をロード中...");
                 const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
                 const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
 
@@ -96,15 +96,13 @@
                         }},
                         { selector: 'edge', style: { 
                             'width': CONFIG.edgeWidth, 
-                            'line-color': '#999', // エッジを少し濃く
-                            'opacity': 0.4,
+                            'line-color': '#999', 
+                            'opacity': 0.3,
                             'curve-style': 'haystack',
                             'transition-property': 'opacity, width, line-color',
                             'transition-duration': '0.3s'
                         }},
-                        // フォーカス時の「薄くする」スタイル
-                        { selector: '.faded', style: { 'opacity': 0.05, 'text-opacity': 0 }},
-                        // フォーカス時の「強調する」スタイル
+                        { selector: '.faded', style: { 'opacity': 0.03, 'text-opacity': 0 }},
                         { selector: '.highlight', style: {
                             'opacity': 1,
                             'font-size': CONFIG.baseFontSize * 1.8,
@@ -115,10 +113,12 @@
                             'opacity': 1, 'width': CONFIG.edgeWidth * 2.5, 'line-color': '#222', 'z-index': 998
                         }}
                     ],
-                    layout: { name: 'preset' }
+                    layout: { name: 'preset' },
+                    autoungrabify: true, // ドラッグ禁止
+                    userZoomingEnabled: true,
+                    userPanningEnabled: true
                 });
 
-                // 初期表示位置
                 cy.viewport({
                     zoom: CONFIG.initialZoom,
                     pan: { 
@@ -127,16 +127,27 @@
                     }
                 });
 
-                // --- インタラクション (クリックフォーカス) ---
+                // --- 2階層フォーカス機能 ---
                 cy.on('tap', 'node', function(e){
                     const node = e.target;
-                    const neighborhood = node.neighborhood().add(node);
+                    
+                    // 1階層目(隣人)を取得
+                    const neighborNodes = node.neighborhood().nodes();
+                    // 2階層目(隣人の隣人)を取得
+                    const neighborOfNeighbors = neighborNodes.neighborhood().nodes();
+                    
+                    // 全対象を合体
+                    const totalFocusArea = node.add(neighborNodes).add(neighborOfNeighbors);
+                    // 強調するエッジ（選択されたエリア内の全エッジ）
+                    const targetEdges = totalFocusArea.connectedEdges().filter(edge => {
+                        return totalFocusArea.has(edge.source()) && totalFocusArea.has(edge.target());
+                    });
 
-                    addLog(`フォーカス: ${node.data('label')}`, "#0ff");
+                    addLog(`フォーカス(2階層先まで): ${node.data('label')}`, "#0ff");
 
                     cy.elements().addClass('faded').removeClass('highlight edge-highlight');
-                    neighborhood.removeClass('faded').addClass('highlight');
-                    node.connectedEdges().removeClass('faded').addClass('edge-highlight');
+                    totalFocusArea.removeClass('faded').addClass('highlight');
+                    targetEdges.removeClass('faded').addClass('edge-highlight');
                 });
 
                 cy.on('tap', function(e){
@@ -146,7 +157,7 @@
                     }
                 });
 
-                addLog("準備完了。ノードをクリックすると接続先を強調します。");
+                addLog("準備完了。ドラッグは無効、クリックで2階層先まで強調します。");
 
             } catch (err) {
                 addLog("エラー: " + err.message, "#f00");
