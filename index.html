@@ -1,12 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Viewer Debug</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: monospace; }
+        #log-panel { position: absolute; top: 0; left: 0; width: 100%; height: 30%; background: rgba(0, 0, 0, 0.85); color: #00ff00; overflow-y: auto; z-index: 1000; font-size: 12px; padding: 10px; border-bottom: 2px solid #555; }
+        #cy { position: absolute; top: 30%; left: 0; width: 100%; height: 70%; background-color: #fff; }
+        .log-entry { margin-bottom: 2px; border-bottom: 1px solid #333; }
+        .log-info { color: #00ffff; }
+        .log-error { color: #ff4444; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="log-panel"><div class="log-entry">--- DEBUG START ---</div></div>
+    <div id="cy"></div>
+
     <script>
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
         
-        // --- ここを書き換えるだけで見た目を調整できます ---
-        const SCALE = 1000;       // 座標の倍率（さらに広げました）
-        const NODE_SIZE = 80;     // ノード（点）の大きさ
-        const FONT_SIZE = 60;     // ラベル（文字）の大きさ
-        const EDGE_WIDTH = 10;    // 線の太さ
-        // ----------------------------------------------
+        // 調整用パラメータ
+        const SCALE = 3000;       
+        const NODE_SIZE = 100;    
+        const FONT_SIZE = 80;     
+        const EDGE_WIDTH = 5;     
 
         function log(msg, type = '') {
             const panel = document.getElementById('log-panel');
@@ -18,7 +38,9 @@
         }
 
         async function fetchData(url, name) {
+            log(`${name}読み込み中...`);
             const response = await fetch(url);
+            if (!response.ok) throw new Error(`${name}の通信エラー`);
             const text = await response.text();
             return Papa.parse(text, { header: true, skipEmptyLines: true, transformHeader: h => h.trim().toLowerCase() }).data;
         }
@@ -33,27 +55,31 @@
                     fetchData(edgeUrl, "エッジ")
                 ]);
 
+                log(`ノード取得数: ${nodesData.length}`);
                 const elements = [];
                 const nodeIdSet = new Set();
 
-                nodesData.forEach(row => {
+                nodesData.forEach((row, index) => {
                     const id = String(row.id || row.Id || "").trim();
-                    if (id) {
-                        elements.push({
-                            group: 'nodes',
-                            data: { 
-                                id: id, 
-                                label: row.label || id,
-                                nodeColor: row.color || row.Color || '#1a73e8',
-                                rawData: row 
-                            },
-                            position: { 
-                                x: parseFloat(row.x || 0) * SCALE, 
-                                y: parseFloat(row.y || 0) * SCALE 
-                            }
-                        });
-                        nodeIdSet.add(id);
-                    }
+                    if (!id) return;
+
+                    // 数値チェック：x, y が不正なら 0 にする
+                    const rawX = parseFloat(row.x);
+                    const rawY = parseFloat(row.y);
+                    const posX = isNaN(rawX) ? 0 : rawX * SCALE;
+                    const posY = isNaN(rawY) ? 0 : rawY * SCALE;
+
+                    elements.push({
+                        group: 'nodes',
+                        data: { 
+                            id: id, 
+                            label: row.label || id,
+                            nodeColor: row.color || row.Color || '#1a73e8',
+                            rawData: row 
+                        },
+                        position: { x: posX, y: posY }
+                    });
+                    nodeIdSet.add(id);
                 });
 
                 edgesData.forEach(row => {
@@ -67,52 +93,50 @@
                     }
                 });
 
+                log("Cytoscape描画開始...");
                 const cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
-                        { 
-                            selector: 'node', 
-                            style: { 
-                                'label': 'data(label)', 
-                                'background-color': 'data(nodeColor)', 
-                                'width': NODE_SIZE, 
-                                'height': NODE_SIZE, 
-                                'font-size': FONT_SIZE,
-                                'text-valign': 'bottom',
-                                'text-margin-y': 10,
-                                'color': '#000',
-                                'font-weight': 'bold',
-                                'text-outline-width': 2,
-                                'text-outline-color': '#fff'
-                            } 
-                        },
-                        { 
-                            selector: 'edge', 
-                            style: { 
-                                'width': EDGE_WIDTH, 
-                                'line-color': '#ccc', 
-                                'opacity': 0.4, 
-                                'curve-style': 'haystack' 
-                            } 
-                        }
+                        { selector: 'node', style: {
+                            'label': 'data(label)',
+                            'background-color': 'data(nodeColor)',
+                            'width': NODE_SIZE,
+                            'height': NODE_SIZE,
+                            'font-size': FONT_SIZE,
+                            'text-valign': 'bottom',
+                            'text-margin-y': 10,
+                            'text-outline-width': 3,
+                            'text-outline-color': '#fff'
+                        }},
+                        { selector: 'edge', style: {
+                            'width': EDGE_WIDTH,
+                            'line-color': '#ccc',
+                            'opacity': 0.5,
+                            'curve-style': 'haystack'
+                        }}
                     ],
                     layout: { name: 'preset' },
-                    autoungrabify: true
+                    autoungrabify: true,
+                    wheelSensitivity: 0.2 // スクロール拡大の感度
                 });
+
+                // 描画後、全要素が見えるように自動ズーム
+                cy.fit(null, 100); 
 
                 cy.on('mouseover tap', 'node', function(evt){
                     const data = evt.target.data('rawData');
-                    let info = "【詳細】";
-                    for(let key in data) { info += ` ${key}: ${data[key]} |`; }
-                    log(info, 'log-info');
+                    log(`【詳細】ID:${data.id || data.Id} | Label:${data.label} | x:${data.x} | y:${data.y}`, 'log-info');
                 });
 
-                log(`調整完了。倍率:${SCALE}, 点:${NODE_SIZE}, 文字:${FONT_SIZE}`);
+                log("描画完了。真っ白な場合は画面をピンチアウト（縮小）してみてください。");
 
             } catch (e) {
-                log("エラー: " + e.message, 'log-error');
+                log("エラー発生: " + e.message, 'log-error');
+                console.error(e);
             }
         }
         init();
     </script>
+</body>
+</html>
