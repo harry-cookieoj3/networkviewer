@@ -3,137 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Viewer Debug</title>
+    <title>Network Data Debugger</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: monospace; }
-        #log-panel { position: absolute; top: 0; left: 0; width: 100%; height: 30%; background: rgba(0, 0, 0, 0.85); color: #00ff00; overflow-y: auto; z-index: 1000; font-size: 12px; padding: 10px; border-bottom: 2px solid #555; }
-        #cy { position: absolute; top: 30%; left: 0; width: 100%; height: 70%; background-color: #fff; }
-        .log-entry { margin-bottom: 2px; border-bottom: 1px solid #333; }
-        .log-info { color: #00ffff; }
-        .log-error { color: #ff4444; font-weight: bold; }
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #111; color: #0f0; font-family: monospace; }
+        #log-panel { position: absolute; top: 0; left: 0; width: 100%; height: 50%; background: rgba(0,0,0,0.9); overflow-y: auto; z-index: 100; border-bottom: 2px solid #0f0; padding: 10px; font-size: 11px; }
+        #cy { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #fff; }
+        .log-err { color: #f44; }
+        .log-val { color: #ff0; }
     </style>
 </head>
 <body>
-    <div id="log-panel"><div class="log-entry">--- DEBUG START ---</div></div>
+    <div id="log-panel"><div>--- SYSTEM LOG START ---</div></div>
     <div id="cy"></div>
 
     <script>
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
-        
-        // 調整用パラメータ
-        const SCALE = 1;       
-        const NODE_SIZE = 100;    
-        const FONT_SIZE = 80;     
-        const EDGE_WIDTH = 5;     
 
-        function log(msg, type = '') {
-            const panel = document.getElementById('log-panel');
+        function log(msg, cls='') {
             const div = document.createElement('div');
-            div.className = 'log-entry ' + type;
+            div.className = cls;
             div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            const panel = document.getElementById('log-panel');
             panel.appendChild(div);
             panel.scrollTop = panel.scrollHeight;
         }
 
-        async function fetchData(url, name) {
-            log(`${name}読み込み中...`);
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`${name}の通信エラー`);
-            const text = await response.text();
-            return Papa.parse(text, { header: true, skipEmptyLines: true, transformHeader: h => h.trim().toLowerCase() }).data;
-        }
-
         async function init() {
-            const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
-            const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
-
             try {
-                const [nodesData, edgesData] = await Promise.all([
-                    fetchData(nodeUrl, "ノード"),
-                    fetchData(edgeUrl, "エッジ")
-                ]);
+                const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
+                log("通信開始...");
+                
+                const resp = await fetch(nodeUrl);
+                const csvText = await resp.text();
+                log(`受信完了: ${csvText.length} 文字`);
 
-                log(`ノード取得数: ${nodesData.length}`);
-                const elements = [];
-                const nodeIdSet = new Set();
+                const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true, transformHeader: h => h.trim().toLowerCase() });
+                const data = parsed.data;
+                log(`解析成功: ${data.length} 件のノード`);
 
-                nodesData.forEach((row, index) => {
-                    const id = String(row.id || row.Id || "").trim();
-                    if (!id) return;
+                if (data.length > 0) {
+                    log(`[サンプル] ID: ${data[0].id}, X: ${data[0].x}, Y: ${data[0].y}`, "log-val");
+                }
 
-                    // 数値チェック：x, y が不正なら 0 にする
-                    const rawX = parseFloat(row.x);
-                    const rawY = parseFloat(row.y);
-                    const posX = isNaN(rawX) ? 0 : rawX * SCALE;
-                    const posY = isNaN(rawY) ? 0 : rawY * SCALE;
-
-                    elements.push({
+                const elements = data.map((row, i) => {
+                    const x = parseFloat(row.x || 0);
+                    const y = parseFloat(row.y || 0);
+                    if(i < 3) log(`Node[${i}]計算座標: ${x}, ${y}`, "log-val");
+                    
+                    return {
                         group: 'nodes',
-                        data: { 
-                            id: id, 
-                            label: row.label || id,
-                            nodeColor: row.color || row.Color || '#1a73e8',
-                            rawData: row 
-                        },
-                        position: { x: posX, y: posY }
-                    });
-                    nodeIdSet.add(id);
+                        data: { id: String(row.id || i), label: row.label || row.id, color: row.color || '#1a73e8' },
+                        position: { x: x, y: y }
+                    };
                 });
 
-                edgesData.forEach(row => {
-                    const s = String(row.source || "").trim();
-                    const t = String(row.target || "").trim();
-                    if (nodeIdSet.has(s) && nodeIdSet.has(t)) {
-                        elements.push({
-                            group: 'edges',
-                            data: { source: s, target: t }
-                        });
-                    }
-                });
-
-                log("Cytoscape描画開始...");
                 const cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
-                        { selector: 'node', style: {
-                            'label': 'data(label)',
-                            'background-color': 'data(nodeColor)',
-                            'width': NODE_SIZE,
-                            'height': NODE_SIZE,
-                            'font-size': FONT_SIZE,
-                            'text-valign': 'bottom',
-                            'text-margin-y': 10,
-                            'text-outline-width': 3,
-                            'text-outline-color': '#fff'
-                        }},
-                        { selector: 'edge', style: {
-                            'width': EDGE_WIDTH,
-                            'line-color': '#ccc',
-                            'opacity': 0.5,
-                            'curve-style': 'haystack'
-                        }}
+                        { selector: 'node', style: { 'width': 30, 'height': 30, 'label': 'data(label)', 'background-color': 'data(color)', 'font-size': 12 } },
+                        { selector: 'edge', style: { 'width': 2, 'line-color': '#ccc' } }
                     ],
-                    layout: { name: 'preset' },
-                    autoungrabify: true,
-                    wheelSensitivity: 0.2 // スクロール拡大の感度
+                    layout: { name: 'preset' }
                 });
 
-                // 描画後、全要素が見えるように自動ズーム
-                cy.fit(null, 100); 
-
-                cy.on('mouseover tap', 'node', function(evt){
-                    const data = evt.target.data('rawData');
-                    log(`【詳細】ID:${data.id || data.Id} | Label:${data.label} | x:${data.x} | y:${data.y}`, 'log-info');
-                });
-
-                log("描画完了。真っ白な場合は画面をピンチアウト（縮小）してみてください。");
+                // 【最重要】データが存在する場所にカメラを強制移動
+                cy.fit(); 
+                log(`ズーム完了。現在のズーム倍率: ${cy.zoom()}`);
+                
+                if (cy.nodes().length > 0) {
+                    const center = cy.nodes()[0].position();
+                    log(`Node[0]の画面上位置: x:${center.x.toFixed(2)}, y:${center.y.toFixed(2)}`, "log-val");
+                }
 
             } catch (e) {
-                log("エラー発生: " + e.message, 'log-error');
-                console.error(e);
+                log("致命的エラー: " + e.message, "log-err");
             }
         }
         init();
