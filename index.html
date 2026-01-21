@@ -1,31 +1,12 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Viewer Fixed</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: monospace; }
-        #log-panel {
-            position: absolute; top: 0; left: 0; width: 100%; height: 30%;
-            background: rgba(0, 0, 0, 0.85); color: #00ff00;
-            overflow-y: auto; z-index: 1000; font-size: 12px; padding: 10px;
-            border-bottom: 2px solid #555; pointer-events: auto;
-        }
-        #cy { position: absolute; top: 30%; left: 0; width: 100%; height: 70%; background-color: #fff; }
-        .log-entry { margin-bottom: 2px; border-bottom: 1px solid #333; }
-        .log-info { color: #00ffff; font-weight: bold; }
-    </style>
-</head>
-<body>
-    <div id="log-panel"><div class="log-entry">--- DEBUG & INFO LOG ---</div></div>
-    <div id="cy"></div>
-
     <script>
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
-        const SCALE = 1000; // ここを書き換えるだけで倍率を調整できます
+        
+        // --- ここを書き換えるだけで見た目を調整できます ---
+        const SCALE = 1000;       // 座標の倍率（さらに広げました）
+        const NODE_SIZE = 80;     // ノード（点）の大きさ
+        const FONT_SIZE = 60;     // ラベル（文字）の大きさ
+        const EDGE_WIDTH = 10;    // 線の太さ
+        // ----------------------------------------------
 
         function log(msg, type = '') {
             const panel = document.getElementById('log-panel');
@@ -64,9 +45,8 @@
                                 id: id, 
                                 label: row.label || id,
                                 nodeColor: row.color || row.Color || '#1a73e8',
-                                rawData: row // 全データを保持させておく
+                                rawData: row 
                             },
-                            // 座標をSCALE倍して配置
                             position: { 
                                 x: parseFloat(row.x || 0) * SCALE, 
                                 y: parseFloat(row.y || 0) * SCALE 
@@ -91,24 +71,44 @@
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
-                        { selector: 'node', style: { 'label': 'data(label)', 'background-color': 'data(nodeColor)', 'width': 10, 'height': 10, 'font-size': '8px' } },
-                        { selector: 'edge', style: { 'width': 1, 'line-color': '#ccc', 'opacity': 0.3, 'curve-style': 'haystack' } }
+                        { 
+                            selector: 'node', 
+                            style: { 
+                                'label': 'data(label)', 
+                                'background-color': 'data(nodeColor)', 
+                                'width': NODE_SIZE, 
+                                'height': NODE_SIZE, 
+                                'font-size': FONT_SIZE,
+                                'text-valign': 'bottom',
+                                'text-margin-y': 10,
+                                'color': '#000',
+                                'font-weight': 'bold',
+                                'text-outline-width': 2,
+                                'text-outline-color': '#fff'
+                            } 
+                        },
+                        { 
+                            selector: 'edge', 
+                            style: { 
+                                'width': EDGE_WIDTH, 
+                                'line-color': '#ccc', 
+                                'opacity': 0.4, 
+                                'curve-style': 'haystack' 
+                            } 
+                        }
                     ],
-                    layout: { name: 'preset' }, // 固定配置モード
-                    autoungrabify: true // ノードのドラッグを禁止
+                    layout: { name: 'preset' },
+                    autoungrabify: true
                 });
 
-                // ポイント（ホバー）した時のイベント
                 cy.on('mouseover tap', 'node', function(evt){
                     const data = evt.target.data('rawData');
-                    let info = "【ノード詳細】";
-                    for(let key in data) {
-                        info += ` ${key}: ${data[key]} |`;
-                    }
+                    let info = "【詳細】";
+                    for(let key in data) { info += ` ${key}: ${data[key]} |`; }
                     log(info, 'log-info');
                 });
 
-                log(`表示完了: ${elements.length}件。ノードを触ると詳細が表示されます。倍率: ${SCALE}倍`);
+                log(`調整完了。倍率:${SCALE}, 点:${NODE_SIZE}, 文字:${FONT_SIZE}`);
 
             } catch (e) {
                 log("エラー: " + e.message, 'log-error');
@@ -116,5 +116,3 @@
         }
         init();
     </script>
-</body>
-</html>
