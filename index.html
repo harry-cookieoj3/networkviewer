@@ -2,14 +2,13 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Network Viewer - Spacing Adjusted</title>
+    <title>Network Viewer - Interactive Focus</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        /* 背景を薄いグレーにして線を見やすくしました */
-        body { margin: 0; overflow: hidden; font-family: monospace; background: #f0f0f0; } 
+        body { margin: 0; overflow: hidden; font-family: monospace; background: #fff; } 
         #log-panel { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 20%; 
+            position: absolute; top: 0; left: 0; width: 100%; height: 18%; 
             background: rgba(0,0,0,0.85); color: #0f0; overflow-y: auto; z-index: 9999; 
             padding: 10px; font-size: 11px; border-bottom: 2px solid #555;
         }
@@ -32,23 +31,20 @@
 
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
         
-        // --- 調整用パラメータ ---
         const CONFIG = {
-            COORD_DIST_SCALE: 1.5, // 距離を1.5倍に広げる (もっと離したい場合はここを2.0などに)
-            nodeSize: 2800,        // ノードをさらに強調
-            fontSize: 1400,  
-            edgeWidth: 25,         // 線を太く
-            edgeColor: '#999',     // 線の色を濃く
+            scale: 1.0,
+            baseNodeSize: 150, // Size値に掛ける倍率 (Size 20なら 3000px)
+            baseFontSize: 1000,
+            edgeWidth: 25,
             defaultColor: '#1a73e8',
-            // 初期表示位置 (倍率を掛けて計算)
             centerX: 9370,   
             centerY: 9140,   
-            initialZoom: 0.003     // 距離を離した分、さらに引き(0.003)に設定
+            initialZoom: 0.005
         };
 
         async function start() {
             try {
-                addLog("間隔を広げ、背景色を調整して表示中...");
+                addLog("高機能版をロード中...");
                 const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
                 const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
 
@@ -64,16 +60,15 @@
                 nodesData.forEach(n => {
                     const id = (n.id || n.Id || "").trim();
                     if(!id) return;
+                    
+                    const valSize = parseFloat(n.size || n.Size || 10);
+                    const nSize = valSize * CONFIG.baseNodeSize;
                     const nColor = n.color || n.Color || CONFIG.defaultColor;
 
                     elements.push({
                         group: 'nodes',
-                        data: { id, label: n.label || id, color: nColor, raw: n },
-                        // 座標をスケールさせて距離を離す
-                        position: { 
-                            x: parseFloat(n.x || 0) * CONFIG.COORD_DIST_SCALE, 
-                            y: -parseFloat(n.y || 0) * CONFIG.COORD_DIST_SCALE 
-                        }
+                        data: { id, label: n.label || id, color: nColor, size: nSize, raw: n },
+                        position: { x: parseFloat(n.x || 0), y: -parseFloat(n.y || 0) }
                     });
                     nodeIds.add(id);
                 });
@@ -91,41 +86,67 @@
                     elements: elements,
                     style: [
                         { selector: 'node', style: {
-                            'width': CONFIG.nodeSize, 'height': CONFIG.nodeSize,
-                            'label': 'data(label)', 'font-size': CONFIG.fontSize,
+                            'width': 'data(size)', 'height': 'data(size)',
+                            'label': 'data(label)', 'font-size': CONFIG.baseFontSize,
                             'background-color': 'data(color)',
-                            'text-outline-width': 30, 'text-outline-color': '#fff',
-                            'color': '#333', 'font-weight': 'bold'
+                            'text-outline-width': 20, 'text-outline-color': '#fff',
+                            'color': '#000', 'font-weight': 'bold',
+                            'transition-property': 'opacity, font-size, text-outline-width',
+                            'transition-duration': '0.3s'
                         }},
                         { selector: 'edge', style: { 
                             'width': CONFIG.edgeWidth, 
-                            'line-color': CONFIG.edgeColor, 
-                            'opacity': 0.5, // 線の透明度を上げて見やすく
-                            'curve-style': 'haystack'
+                            'line-color': '#999', // エッジを少し濃く
+                            'opacity': 0.4,
+                            'curve-style': 'haystack',
+                            'transition-property': 'opacity, width, line-color',
+                            'transition-duration': '0.3s'
+                        }},
+                        // フォーカス時の「薄くする」スタイル
+                        { selector: '.faded', style: { 'opacity': 0.05, 'text-opacity': 0 }},
+                        // フォーカス時の「強調する」スタイル
+                        { selector: '.highlight', style: {
+                            'opacity': 1,
+                            'font-size': CONFIG.baseFontSize * 1.8,
+                            'text-outline-width': 40,
+                            'z-index': 999
+                        }},
+                        { selector: '.edge-highlight', style: {
+                            'opacity': 1, 'width': CONFIG.edgeWidth * 2.5, 'line-color': '#222', 'z-index': 998
                         }}
                     ],
-                    layout: { name: 'preset' },
-                    autoungrabify: true
+                    layout: { name: 'preset' }
                 });
 
-                // 初期位置への移動 (距離倍率を考慮)
-                const viewX = CONFIG.centerX * CONFIG.COORD_DIST_SCALE;
-                const viewY = -CONFIG.centerY * CONFIG.COORD_DIST_SCALE;
-
+                // 初期表示位置
                 cy.viewport({
                     zoom: CONFIG.initialZoom,
                     pan: { 
-                        x: cy.width() / 2 - viewX * CONFIG.initialZoom, 
-                        y: cy.height() / 2 - viewY * CONFIG.initialZoom 
+                        x: cy.width() / 2 - CONFIG.centerX * CONFIG.initialZoom, 
+                        y: cy.height() / 2 - (-CONFIG.centerY) * CONFIG.initialZoom 
                     }
                 });
 
-                addLog(`表示完了。距離倍率:${CONFIG.COORD_DIST_SCALE} / ズーム:${CONFIG.initialZoom}`, "#0f0");
+                // --- インタラクション (クリックフォーカス) ---
+                cy.on('tap', 'node', function(e){
+                    const node = e.target;
+                    const neighborhood = node.neighborhood().add(node);
 
-                cy.on('tap', 'node', function(evt){
-                    const d = evt.target.data('raw');
-                    addLog(`【詳細】${d.label || d.id} (x:${d.x}, y:${d.y})`, "#0ff");
+                    addLog(`フォーカス: ${node.data('label')}`, "#0ff");
+
+                    cy.elements().addClass('faded').removeClass('highlight edge-highlight');
+                    neighborhood.removeClass('faded').addClass('highlight');
+                    node.connectedEdges().removeClass('faded').addClass('edge-highlight');
                 });
+
+                cy.on('tap', function(e){
+                    if( e.target === cy ){
+                        addLog("フォーカス解除", "#aaa");
+                        cy.elements().removeClass('faded highlight edge-highlight');
+                    }
+                });
+
+                addLog("準備完了。ノードをクリックすると接続先を強調します。");
 
             } catch (err) {
                 addLog("エラー: " + err.message, "#f00");
