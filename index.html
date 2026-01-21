@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Network Viewer - Adjusted View</title>
+    <title>Network Viewer - Coordinate Fixed</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
@@ -34,19 +34,19 @@
         // --- 調整用パラメータ ---
         const CONFIG = {
             scale: 1.0,
-            nodeSize: 2200,  // ノードをさらに大きく調整 (前回の1500からアップ)
-            fontSize: 1200,  // 文字もあわせて少し大きく
-            edgeWidth: 20,   // 線も少し強調
+            nodeSize: 2500,  // ノードをさらに少し大きく
+            fontSize: 1300,  
+            edgeWidth: 20,   
             defaultColor: '#1a73e8',
             // 初期表示位置
             centerX: 9370,   
-            centerY: 9140,
-            initialZoom: 0.008 // 少しアップにするための倍率 (数字を大きくすると寄ります)
+            centerY: 9140,   // ここはスプレッドシートの値を入力
+            initialZoom: 0.005 // 前回0.008から少し引き(0.005)に設定
         };
 
         async function start() {
             try {
-                addLog("座標を調整して起動中...");
+                addLog("Y軸反転を補正して表示中...");
                 const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
                 const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
 
@@ -67,7 +67,11 @@
                     elements.push({
                         group: 'nodes',
                         data: { id, label: n.label || id, color: nColor, raw: n },
-                        position: { x: parseFloat(n.x || 0) * CONFIG.scale, y: parseFloat(n.y || 0) * CONFIG.scale }
+                        // Y座標にマイナスを掛けて上下反転を補正
+                        position: { 
+                            x: parseFloat(n.x || 0), 
+                            y: -parseFloat(n.y || 0) 
+                        }
                     });
                     nodeIds.add(id);
                 });
@@ -88,30 +92,27 @@
                             'width': CONFIG.nodeSize, 'height': CONFIG.nodeSize,
                             'label': 'data(label)', 'font-size': CONFIG.fontSize,
                             'background-color': 'data(color)',
-                            'text-outline-width': 20, 'text-outline-color': '#fff',
+                            'text-outline-width': 25, 'text-outline-color': '#fff',
                             'color': '#000', 'font-weight': 'bold'
                         }},
                         { selector: 'edge', style: { 
-                            'width': CONFIG.edgeWidth, 
-                            'line-color': '#ccc', 
-                            'opacity': 0.3,
-                            'curve-style': 'haystack'
+                            'width': CONFIG.edgeWidth, 'line-color': '#ccc', 'opacity': 0.3, 'curve-style': 'haystack'
                         }}
                     ],
                     layout: { name: 'preset' },
                     autoungrabify: true
                 });
 
-                // 指定した座標を中心に、少しズームした状態で表示
+                // Y軸反転に合わせて中心位置の計算も修正
                 cy.viewport({
                     zoom: CONFIG.initialZoom,
                     pan: { 
                         x: cy.width() / 2 - CONFIG.centerX * CONFIG.initialZoom, 
-                        y: cy.height() / 2 - CONFIG.centerY * CONFIG.initialZoom 
+                        y: cy.height() / 2 - (-CONFIG.centerY) * CONFIG.initialZoom 
                     }
                 });
 
-                addLog(`中心座標(${CONFIG.centerX}, ${CONFIG.centerY})付近を表示しました`, "#0f0");
+                addLog(`表示完了。中心(9370, 9140) / ズーム:${CONFIG.initialZoom}`, "#0f0");
 
                 cy.on('tap', 'node', function(evt){
                     const d = evt.target.data('raw');
