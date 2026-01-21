@@ -72,7 +72,6 @@
         }
 
         async function init() {
-            // 前回の /export がダメだった場合を考え、/gviz/tq 形式を使用
             const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=${NODE_GID}`;
             const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=${EDGE_GID}`;
 
@@ -82,28 +81,45 @@
                     fetchData(edgeUrl, "エッジシート")
                 ]);
 
-                log("Cytoscapeエレメント作成開始...");
+                log("データ検証中...");
                 const elements = [];
-                
+                const nodeIdSet = new Set(); // 存在するIDをメモする
+
+                // 1. ノードの登録
                 nodesData.forEach(row => {
                     const id = row.id || row.Id;
                     if (id) {
+                        const strId = String(id).trim();
                         elements.push({
                             group: 'nodes',
-                            data: { id: String(id), label: row.label || id }
+                            data: { id: strId, label: row.label || id }
                         });
+                        nodeIdSet.add(strId);
                     }
                 });
 
+                // 2. エッジの登録（存在チェック付き）
+                let ignoreCount = 0;
                 edgesData.forEach(row => {
-                    if (row.source && row.target) {
+                    const s = String(row.source || "").trim();
+                    const t = String(row.target || "").trim();
+                    
+                    // 両方のIDが存在する場合のみ線を追加
+                    if (nodeIdSet.has(s) && nodeIdSet.has(t)) {
                         elements.push({
                             group: 'edges',
-                            data: { source: String(row.source), target: String(row.target) }
+                            data: { source: s, target: t }
                         });
+                    } else {
+                        ignoreCount++;
                     }
                 });
-                log(`エレメント合計: ${elements.length} 個 (内ノード: ${nodesData.length}, エッジ: ${edgesData.length})`);
+
+                if (ignoreCount > 0) {
+                    log(`警告: 存在しないIDへの接続を ${ignoreCount} 件スキップしました`, true);
+                }
+
+                log(`描画開始: ノード数 ${nodeIdSet.size}, エッジ数 ${elements.length - nodeIdSet.size}`);
 
                 const cy = cytoscape({
                     container: document.getElementById('cy'),
@@ -112,16 +128,16 @@
                         { selector: 'node', style: { 'label': 'data(label)', 'background-color': '#1a73e8', 'width': 10, 'height': 10, 'font-size': '8px' } },
                         { selector: 'edge', style: { 'width': 1, 'line-color': '#999', 'opacity': 0.4, 'curve-style': 'haystack' } }
                     ],
-                    layout: { name: 'cose', padding: 30 }
+                    layout: { name: 'cose', padding: 30, componentSpacing: 50 }
                 });
 
-                log("描画プロセス完了", false);
-                document.querySelector('.log-success'); // 成功表示用タグ
+                log("完了！図が表示されているはずです。");
 
             } catch (e) {
                 log("致命的エラー: " + e.message, true);
             }
         }
+
 
         init();
     </script>
