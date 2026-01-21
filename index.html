@@ -7,70 +7,105 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
-        #cy { width: 100vw; height: 100vh; background-color: #ffffff; }
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-family: sans-serif; text-align: center; }
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #f0f0f0; }
+        #cy { width: 100vw; height: 100vh; display: block; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-family: sans-serif; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body>
-    <div id="loading">データを取得中...<br><span id="status"></span></div>
+    <div id="loading">ネットワークデータを読み込み中...</div>
     <div id="cy"></div>
 
     <script>
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
-        // 直接エクスポート用URLを作成
+        // 確認済みのダウンロードURL
         const NODE_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/export?format=csv&gid=0`;
         const EDGE_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/export?format=csv&gid=1184231939`;
 
-        async function fetchData(url, name) {
-            document.getElementById('status').innerText = name + "...";
+        async function fetchData(url) {
             const response = await fetch(url);
-            if (!response.ok) throw new Error(name + "の取得に失敗。スプレッドシートの共有が「全員」になっているか確認してください。");
+            if (!response.ok) throw new Error("データの取得に失敗しました");
             const text = await response.text();
+            // 列名を小文字に統一して読み込み
             return Papa.parse(text, { header: true, skipEmptyLines: true, transformHeader: h => h.trim().toLowerCase() }).data;
         }
 
         async function init() {
             try {
                 const [nodesData, edgesData] = await Promise.all([
-                    fetchData(NODE_URL, "ノード"),
-                    fetchData(EDGE_URL, "エッジ")
+                    fetchData(NODE_URL),
+                    fetchData(EDGE_URL)
                 ]);
 
-                const elements = [];
+                const elements = { nodes: [], edges: [] };
+
+                // ノード（点）の構築
                 nodesData.forEach(row => {
                     const id = row.id || row.Id;
                     if (id) {
-                        elements.push({
-                            group: 'nodes',
-                            data: { id: String(id), label: row.label || id, color: row.color || '#1a73e8' },
-                            position: { x: row.x ? parseFloat(row.x) : undefined, y: row.y ? parseFloat(row.y) : undefined }
+                        elements.nodes.push({
+                            data: { 
+                                id: String(id), 
+                                label: row.label || id,
+                                color: row.color || '#1a73e8'
+                            },
+                            // 座標(x,y)があれば反映
+                            position: (row.x && row.y) ? { x: parseFloat(row.x), y: parseFloat(row.y) } : undefined
                         });
                     }
                 });
 
+                // エッジ（線）の構築
                 edgesData.forEach(row => {
                     if (row.source && row.target) {
-                        elements.push({
-                            group: 'edges',
-                            data: { source: String(row.source), target: String(row.target) }
+                        elements.edges.push({
+                            data: { 
+                                source: String(row.source), 
+                                target: String(row.target) 
+                            }
                         });
                     }
                 });
 
                 document.getElementById('loading').style.display = 'none';
 
-                cytoscape({
+                const cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
-                        { selector: 'node', style: { 'label': 'data(label)', 'background-color': 'data(color)', 'width': 12, 'height': 12, 'font-size': '8px', 'text-valign': 'bottom', 'color': '#333' } },
-                        { selector: 'edge', style: { 'width': 0.8, 'line-color': '#ddd', 'curve-style': 'haystack', 'opacity': 0.6 } }
+                        {
+                            selector: 'node',
+                            style: {
+                                'label': 'data(label)',
+                                'background-color': 'data(color)',
+                                'width': 12,
+                                'height': 12,
+                                'font-size': '8px',
+                                'text-valign': 'bottom',
+                                'text-margin-y': 2,
+                                'color': '#333'
+                            }
+                        },
+                        {
+                            selector: 'edge',
+                            style: {
+                                'width': 1,
+                                'line-color': '#ccc',
+                                'curve-style': 'haystack',
+                                'opacity': 0.5
+                            }
+                        }
                     ],
-                    layout: { name: (nodesData[0] && nodesData[0].x) ? 'preset' : 'cose', fit: true, padding: 30 }
+                    layout: { 
+                        // 座標がある場合はそのまま配置、なければ自動で並べる
+                        name: (elements.nodes[0] && elements.nodes[0].position) ? 'preset' : 'cose',
+                        fit: true,
+                        padding: 50
+                    }
                 });
+
             } catch (e) {
-                document.getElementById('loading').innerHTML = `<div style="color:red">エラー: ${e.message}</div>`;
+                document.getElementById('loading').innerHTML = `<span style="color:red">エラー: ${e.message}</span>`;
             }
         }
         init();
