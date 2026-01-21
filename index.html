@@ -2,15 +2,16 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Network Salvage Mode</title>
+    <title>Network Viewer - Final Colors</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; font-family: monospace; background: #333; } /* 背景をグレーに */
+        /* 背景を白に戻しました */
+        body { margin: 0; overflow: hidden; font-family: monospace; background: #fff; } 
         #log-panel { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 25%; 
-            background: #000; color: #0f0; overflow-y: auto; z-index: 9999; 
-            padding: 10px; font-size: 12px; border-bottom: 2px solid #555;
+            position: absolute; top: 0; left: 0; width: 100%; height: 20%; 
+            background: rgba(0,0,0,0.85); color: #0f0; overflow-y: auto; z-index: 9999; 
+            padding: 10px; font-size: 11px; border-bottom: 2px solid #555;
         }
         #cy { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
     </style>
@@ -31,17 +32,18 @@
 
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
         
-        // --- 視認性を上げるための巨大設定 ---
+        // 視認性と全体図を両立する設定
         const CONFIG = {
-            scale: 1.0,      // 座標は一旦そのまま（6万なら6万の場所に置く）
-            nodeSize: 2000,  // 点を「超」巨大化
-            fontSize: 1500,  // 文字も「超」巨大化
-            edgeWidth: 20
+            scale: 1.0,
+            nodeSize: 1500,  // 点のサイズ
+            fontSize: 1000,  // 文字のサイズ
+            edgeWidth: 15,   // 線の太さ
+            defaultColor: '#1a73e8'
         };
 
         async function start() {
             try {
-                addLog("サルベージ開始...");
+                addLog("色設定を反映して起動中...");
                 const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
                 const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
 
@@ -56,13 +58,15 @@
 
                 nodesData.forEach(n => {
                     const id = (n.id || n.Id || "").trim();
-                    const x = parseFloat(n.x || 0);
-                    const y = parseFloat(n.y || 0);
                     if(!id) return;
+                    
+                    // スプレッドシートのcolor列があれば採用、なければデフォルト青
+                    const nColor = n.color || n.Color || CONFIG.defaultColor;
+
                     elements.push({
                         group: 'nodes',
-                        data: { id, label: n.label || id, color: n.color || '#1a73e8', raw: n },
-                        position: { x: x * CONFIG.scale, y: y * CONFIG.scale }
+                        data: { id, label: n.label || id, color: nColor, raw: n },
+                        position: { x: parseFloat(n.x || 0) * CONFIG.scale, y: parseFloat(n.y || 0) * CONFIG.scale }
                     });
                     nodeIds.add(id);
                 });
@@ -82,27 +86,34 @@
                         { selector: 'node', style: {
                             'width': CONFIG.nodeSize, 'height': CONFIG.nodeSize,
                             'label': 'data(label)', 'font-size': CONFIG.fontSize,
-                            'background-color': 'data(color)', 'text-outline-width': 20, 'text-outline-color': '#fff'
+                            'background-color': 'data(color)', // ここで個別の色を反映
+                            'text-outline-width': 15, 'text-outline-color': '#fff',
+                            'color': '#000', 'font-weight': 'bold'
                         }},
-                        { selector: 'edge', style: { 'width': CONFIG.edgeWidth, 'line-color': '#fff', 'opacity': 0.3 }}
+                        { selector: 'edge', style: { 
+                            'width': CONFIG.edgeWidth, 
+                            'line-color': '#ccc', 
+                            'opacity': 0.3,
+                            'curve-style': 'haystack'
+                        }}
                     ],
-                    layout: { name: 'preset' }
+                    layout: { name: 'preset' },
+                    autoungrabify: true
                 });
 
-                // --- ここが重要：特定のノードにズーム ---
                 if (cy.nodes().length > 0) {
-                    const firstNode = cy.nodes()[0];
-                    addLog(`Node[0] (${firstNode.id()}) へジャンプします座標: ${firstNode.position().x}, ${firstNode.position().y}`);
-                    
-                    // 最初のノードの場所にカメラを移動させてズームする
-                    cy.zoom(0.01); // 宇宙から見る
-                    cy.center(firstNode);
+                    // 全体が収まるように自動調整（余白300px）
+                    cy.fit(null, 300);
+                    addLog(`全体図を表示しました（ズーム倍率: ${cy.zoom().toFixed(5)}）`, "#0f0");
                 }
 
-                addLog("SUCCESS: 画面をドラッグしたりズームして探してください", "#0f0");
+                cy.on('tap', 'node', function(evt){
+                    const d = evt.target.data('raw');
+                    addLog(`【詳細】${d.label || d.id} (x:${d.x}, y:${d.y})`, "#0ff");
+                });
 
             } catch (err) {
-                addLog("ERROR: " + err.message, "#f00");
+                addLog("エラー: " + err.message, "#f00");
             }
         }
         start();
