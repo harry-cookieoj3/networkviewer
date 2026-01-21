@@ -3,126 +3,156 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Data Debugger</title>
+    <title>Network Viewer - Final Debug</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #111; color: #0f0; font-family: monospace; }
-        #log-panel { position: absolute; top: 0; left: 0; width: 100%; height: 50%; background: rgba(0,0,0,0.9); overflow-y: auto; z-index: 100; border-bottom: 2px solid #0f0; padding: 10px; font-size: 11px; }
-        #cy { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #fff; }
-        .log-err { color: #f44; }
-        .log-val { color: #ff0; }
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; font-family: monospace; }
+        /* ログパネル */
+        #log-panel { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 25%; 
+            background: rgba(0, 0, 0, 0.9); color: #00ff00; 
+            overflow-y: auto; z-index: 1000; font-size: 11px; padding: 10px; 
+            border-bottom: 2px solid #555; pointer-events: auto;
+        }
+        /* グラフエリア */
+        #cy { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        .log-entry { margin-bottom: 2px; border-bottom: 1px solid #333; }
+        .log-info { color: #00ffff; }
+        .log-error { color: #ff4444; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div id="log-panel"><div>--- SYSTEM LOG START ---</div></div>
+
+    <div id="log-panel"><div class="log-entry">--- SYSTEM READY ---</div></div>
     <div id="cy"></div>
 
     <script>
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
+        
+        // --- 調整用パラメータ ---
+        const COORD_SCALE = 0.1;   // 座標をどれくらい縮めるか（0.1 = 10分の1に凝縮）
+        const NODE_SIZE = 300;     // ノードの大きさ
+        const FONT_SIZE = 200;     // 文字の大きさ
+        const EDGE_WIDTH = 30;     // 線の太さ
+        // -----------------------
 
-        function log(msg, cls='') {
-            const div = document.createElement('div');
-            div.className = cls;
-            div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        function log(msg, type = '') {
             const panel = document.getElementById('log-panel');
+            const div = document.createElement('div');
+            div.className = 'log-entry ' + type;
+            div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
             panel.appendChild(div);
             panel.scrollTop = panel.scrollHeight;
         }
 
+        async function fetchData(url, name) {
+            log(`${name}データ取得中...`);
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`${name}の取得に失敗しました`);
+            const text = await response.text();
+            return Papa.parse(text, { 
+                header: true, 
+                skipEmptyLines: true, 
+                transformHeader: h => h.trim().toLowerCase() 
+            }).data;
+        }
+
         async function init() {
+            const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
+            const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
+
             try {
-                const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
-                log("通信開始...");
-                
-                const resp = await fetch(nodeUrl);
-                const csvText = await resp.text();
-                log(`受信完了: ${csvText.length} 文字`);
+                const [nodesData, edgesData] = await Promise.all([
+                    fetchData(nodeUrl, "ノード"),
+                    fetchData(edgeUrl, "エッジ")
+                ]);
 
-                const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true, transformHeader: h => h.trim().toLowerCase() });
-                const data = parsed.data;
-                log(`解析成功: ${data.length} 件のノード`);
+                log(`データ解析完了: ノード ${nodesData.length}件 / エッジ ${edgesData.length}件`);
 
-                if (data.length > 0) {
-                    log(`[サンプル] ID: ${data[0].id}, X: ${data[0].x}, Y: ${data[0].y}`, "log-val");
-                }
+                const elements = [];
+                const nodeIdSet = new Set();
 
-                    : { name: 'preset' }
-                });
-            
-                const elements = data.map((row, i) => {
-                    // 座標はそのまま（66562などの大きな値）を使用
-                    const x = parseFloat(row.x || 0);
-                    const y = parseFloat(row.y || 0);
-                    
-                    return {
+                // 1. ノードの構築
+                nodesData.forEach((row, i) => {
+                    const id = String(row.id || row.Id || "").trim();
+                    if (!id) return;
+
+                    const rawX = parseFloat(row.x || 0);
+                    const rawY = parseFloat(row.y || 0);
+
+                    elements.push({
                         group: 'nodes',
                         data: { 
-                            id: String(row.id || i), 
-                            label: row.label || row.id, 
-                            color: row.color || '#1a73e8',
+                            id: id, 
+                            label: row.label || id,
+                            nodeColor: row.color || row.Color || '#1a73e8',
                             rawData: row 
                         },
-                        position: { x: x, y: y }
-                    };
+                        // 巨大な座標をスケールダウンして配置
+                        position: { x: rawX * COORD_SCALE, y: rawY * COORD_SCALE }
+                    });
+                    nodeIdSet.add(id);
                 });
 
+                // 2. エッジの構築
+                edgesData.forEach(row => {
+                    const s = String(row.source || "").trim();
+                    const t = String(row.target || "").trim();
+                    if (nodeIdSet.has(s) && nodeIdSet.has(t)) {
+                        elements.push({
+                            group: 'edges',
+                            data: { source: s, target: t }
+                        });
+                    }
+                });
+
+                log("描画エンジン起動...");
                 const cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
-                        { 
-                            selector: 'node', 
-                            style: { 
-                                'width': 3000,          // 座標の大きさに負けない巨大な点
-                                'height': 3000, 
-                                'label': 'data(label)', 
-                                'background-color': 'data(color)', 
-                                'font-size': 2000,      // 巨大な文字
-                                'text-valign': 'bottom',
-                                'text-margin-y': 500,
-                                'text-outline-width': 50,
-                                'text-outline-color': '#fff',
-                                'color': '#000'
-                            } 
-                        },
-                        { 
-                            selector: 'edge', 
-                            style: { 
-                                'width': 300,           // 太い線
-                                'line-color': '#ccc', 
-                                'opacity': 0.4,
-                                'curve-style': 'haystack'
-                            } 
-                        }
+                        { selector: 'node', style: {
+                            'width': NODE_SIZE,
+                            'height': NODE_SIZE,
+                            'label': 'data(label)',
+                            'background-color': 'data(nodeColor)',
+                            'font-size': FONT_SIZE,
+                            'text-valign': 'bottom',
+                            'text-margin-y': 40,
+                            'text-outline-width': 10,
+                            'text-outline-color': '#fff',
+                            'color': '#000',
+                            'font-weight': 'bold'
+                        }},
+                        { selector: 'edge', style: {
+                            'width': EDGE_WIDTH,
+                            'line-color': '#ccc',
+                            'opacity': 0.4,
+                            'curve-style': 'haystack'
+                        }}
                     ],
                     layout: { name: 'preset' },
-                    autoungrabify: true
+                    autoungrabify: true,
+                    wheelSensitivity: 0.1
                 });
 
-                // 全体を画面に収める
-                cy.fit(null, 2000); // 余裕（パディング）を持って表示
-                log(`描画完了。ズーム倍率: ${cy.zoom().toFixed(6)}`);
+                // 画面内に全要素を収める
+                cy.fit(null, 500);
+                log(`描画完了！現在のズーム: ${cy.zoom().toFixed(5)}`);
 
-                // ホバー時にログを出す（確認用）
+                // インタラクション設定
                 cy.on('mouseover tap', 'node', function(evt){
                     const d = evt.target.data('rawData');
-                    log(`【詳細】ID:${d.id} Label:${d.label} (x:${d.x}, y:${d.y})`, 'log-info');
+                    log(`【選択中】ID:${d.id || d.Id} | Label:${d.label} | 原点座標(${d.x}, ${d.y})`, 'log-info');
                 });
 
-                // 【最重要】データが存在する場所にカメラを強制移動
-                cy.fit(); 
-                log(`ズーム完了。現在のズーム倍率: ${cy.zoom()}`);
-                
-                if (cy.nodes().length > 0) {
-                    const center = cy.nodes()[0].position();
-                    log(`Node[0]の画面上位置: x:${center.x.toFixed(2)}, y:${center.y.toFixed(2)}`, "log-val");
-                }
-
             } catch (e) {
-                log("致命的エラー: " + e.message, "log-err");
+                log("致命的なエラー: " + e.message, 'log-error');
+                console.error(e);
             }
         }
+
         init();
     </script>
 </body>
