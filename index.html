@@ -1,11 +1,91 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Network Viewer Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Viewer - JP IDOL</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 0; overflow: hidden; }
+        #cy { width: 100vw; height: 100vh; display: block; background-color: #f9f9f9; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; }
+    </style>
 </head>
 <body>
-    <h1>ネットワークViewer準備中</h1>
-    <p>これからここにGephiのデータが表示されるようになります！</p>
+
+    <div id="loading">データを読み込み中...</div>
+    <div id="cy"></div>
+
+    <script>
+        // 【重要】あなたのGoogle DriveのファイルID
+        const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
+        const CSV_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/export?format=csv`;
+
+        async function init() {
+            try {
+                const response = await fetch(CSV_URL);
+                const csvText = await response.text();
+                
+                // CSVをパース
+                const results = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+                const data = results.data;
+
+                const elements = [];
+                // データの変換（スプレッドシートの列名に合わせて調整）
+                [span_0](start_span)// あなたのデータには "Id" と "label" があります[span_0](end_span)
+                data.forEach(row => {
+                    if (row.Id && row.label) {
+                        elements.push({
+                            data: { 
+                                id: row.Id, 
+                                label: row.label,
+                                color: row.Color || '#666'
+                            },
+                            [span_1](start_span)position: { x: parseFloat(row.x) / 100, y: parseFloat(row.y) / 100 } // 座標がある場合[span_1](end_span)
+                        });
+                    }
+                });
+
+                document.getElementById('loading').style.display = 'none';
+
+                // Cytoscapeの初期化
+                const cy = cytoscape({
+                    container: document.getElementById('cy'),
+                    elements: elements,
+                    style: [
+                        {
+                            selector: 'node',
+                            style: {
+                                'label': 'data(label)',
+                                'background-color': 'data(color)',
+                                'width': 10,
+                                'height': 10,
+                                'font-size': '4px',
+                                'color': '#333'
+                            }
+                        },
+                        {
+                            selector: 'edge',
+                            style: {
+                                'width': 1,
+                                'line-color': '#ccc',
+                                'curve-style': 'bezier'
+                            }
+                        }
+                    ],
+                    layout: {
+                        [span_2](start_span)name: 'preset' // CSVに座標(x,y)が含まれているためそれを使用[span_2](end_span)
+                    }
+                });
+
+            } catch (e) {
+                document.getElementById('loading').innerText = "エラーが発生しました: " + e;
+            }
+        }
+
+        init();
+    </script>
 </body>
 </html>
+
