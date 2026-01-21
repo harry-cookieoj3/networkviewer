@@ -2,158 +2,117 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Viewer - Final Debug</title>
+    <title>Network Fixed Final</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; font-family: monospace; }
-        /* ログパネル */
+        body { margin: 0; overflow: hidden; font-family: monospace; background: #fff; }
         #log-panel { 
             position: absolute; top: 0; left: 0; width: 100%; height: 25%; 
-            background: rgba(0, 0, 0, 0.9); color: #00ff00; 
-            overflow-y: auto; z-index: 1000; font-size: 11px; padding: 10px; 
-            border-bottom: 2px solid #555; pointer-events: auto;
+            background: #000; color: #0f0; overflow-y: auto; z-index: 9999; 
+            padding: 10px; font-size: 12px; border-bottom: 2px solid #555;
         }
-        /* グラフエリア */
         #cy { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
-        .log-entry { margin-bottom: 2px; border-bottom: 1px solid #333; }
-        .log-info { color: #00ffff; }
-        .log-error { color: #ff4444; font-weight: bold; }
+        .log-info { color: #0ff; }
     </style>
 </head>
 <body>
-
-    <div id="log-panel"><div class="log-entry">--- SYSTEM READY ---</div></div>
+    <div id="log-panel"></div>
     <div id="cy"></div>
 
     <script>
-        const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
-        
-        // --- 調整用パラメータ ---
-        const COORD_SCALE = 0.1;   // 座標をどれくらい縮めるか（0.1 = 10分の1に凝縮）
-        const NODE_SIZE = 300;     // ノードの大きさ
-        const FONT_SIZE = 200;     // 文字の大きさ
-        const EDGE_WIDTH = 30;     // 線の太さ
-        // -----------------------
-
-        function log(msg, type = '') {
-            const panel = document.getElementById('log-panel');
+        const logPanel = document.getElementById('log-panel');
+        function addLog(msg, color='') {
             const div = document.createElement('div');
-            div.className = 'log-entry ' + type;
+            div.style.color = color;
             div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            panel.appendChild(div);
-            panel.scrollTop = panel.scrollHeight;
+            logPanel.appendChild(div);
+            logPanel.scrollTop = logPanel.scrollHeight;
         }
 
-        async function fetchData(url, name) {
-            log(`${name}データ取得中...`);
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`${name}の取得に失敗しました`);
-            const text = await response.text();
-            return Papa.parse(text, { 
-                header: true, 
-                skipEmptyLines: true, 
-                transformHeader: h => h.trim().toLowerCase() 
-            }).data;
-        }
+        // 実行開始直後に表示
+        addLog("--- SCRIPT STARTING ---", "#fff");
 
-        async function init() {
-            const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
-            const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
+        const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
+        const CONFIG = {
+            scale: 0.1,    // 座標の圧縮率（0.1 = 10分の1）
+            nodeSize: 300, // 点の大きさ
+            fontSize: 200, // 文字の大きさ
+            edgeWidth: 30  // 線の太さ
+        };
 
+        async function start() {
             try {
-                const [nodesData, edgesData] = await Promise.all([
-                    fetchData(nodeUrl, "ノード"),
-                    fetchData(edgeUrl, "エッジ")
-                ]);
+                addLog("通信準備中...");
+                const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
+                const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
 
-                log(`データ解析完了: ノード ${nodesData.length}件 / エッジ ${edgesData.length}件`);
+                addLog("ノードデータ取得開始...");
+                const resN = await fetch(nodeUrl);
+                const txtN = await resN.text();
+                const nodes = Papa.parse(txtN, {header:true, skipEmptyLines:true}).data;
+                addLog(`ノード解析完了: ${nodes.length}件`);
+
+                addLog("エッジデータ取得開始...");
+                const resE = await fetch(edgeUrl);
+                const txtE = await resE.text();
+                const edges = Papa.parse(txtE, {header:true, skipEmptyLines:true}).data;
+                addLog(`エッジ解析完了: ${edges.length}件`);
 
                 const elements = [];
-                const nodeIdSet = new Set();
+                const nodeIds = new Set();
 
-                // 1. ノードの構築
-                nodesData.forEach((row, i) => {
-                    const id = String(row.id || row.Id || "").trim();
-                    if (!id) return;
-
-                    const rawX = parseFloat(row.x || 0);
-                    const rawY = parseFloat(row.y || 0);
-
+                nodes.forEach(n => {
+                    const id = (n.id || n.Id || "").trim();
+                    if(!id) return;
                     elements.push({
                         group: 'nodes',
-                        data: { 
-                            id: id, 
-                            label: row.label || id,
-                            nodeColor: row.color || row.Color || '#1a73e8',
-                            rawData: row 
-                        },
-                        // 巨大な座標をスケールダウンして配置
-                        position: { x: rawX * COORD_SCALE, y: rawY * COORD_SCALE }
+                        data: { id, label: n.label || id, color: n.color || n.Color || '#1a73e8', raw: n },
+                        position: { x: parseFloat(n.x || 0) * CONFIG.scale, y: parseFloat(n.y || 0) * CONFIG.scale }
                     });
-                    nodeIdSet.add(id);
+                    nodeIds.add(id);
                 });
 
-                // 2. エッジの構築
-                edgesData.forEach(row => {
-                    const s = String(row.source || "").trim();
-                    const t = String(row.target || "").trim();
-                    if (nodeIdSet.has(s) && nodeIdSet.has(t)) {
-                        elements.push({
-                            group: 'edges',
-                            data: { source: s, target: t }
-                        });
+                edges.forEach(e => {
+                    const s = (e.source || "").trim();
+                    const t = (e.target || "").trim();
+                    if(nodeIds.has(s) && nodeIds.has(t)) {
+                        elements.push({ group: 'edges', data: { source: s, target: t } });
                     }
                 });
 
-                log("描画エンジン起動...");
+                addLog("描画開始...");
                 const cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
                         { selector: 'node', style: {
-                            'width': NODE_SIZE,
-                            'height': NODE_SIZE,
-                            'label': 'data(label)',
-                            'background-color': 'data(nodeColor)',
-                            'font-size': FONT_SIZE,
-                            'text-valign': 'bottom',
-                            'text-margin-y': 40,
-                            'text-outline-width': 10,
-                            'text-outline-color': '#fff',
-                            'color': '#000',
-                            'font-weight': 'bold'
+                            'width': CONFIG.nodeSize, 'height': CONFIG.nodeSize,
+                            'label': 'data(label)', 'font-size': CONFIG.fontSize,
+                            'background-color': 'data(color)', 'text-valign': 'bottom',
+                            'text-margin-y': 40, 'text-outline-width': 10, 'text-outline-color': '#fff'
                         }},
-                        { selector: 'edge', style: {
-                            'width': EDGE_WIDTH,
-                            'line-color': '#ccc',
-                            'opacity': 0.4,
-                            'curve-style': 'haystack'
-                        }}
+                        { selector: 'edge', style: { 'width': CONFIG.edgeWidth, 'line-color': '#ccc', 'opacity': 0.4 }}
                     ],
                     layout: { name: 'preset' },
-                    autoungrabify: true,
-                    wheelSensitivity: 0.1
+                    autoungrabify: true
                 });
 
-                // 画面内に全要素を収める
                 cy.fit(null, 500);
-                log(`描画完了！現在のズーム: ${cy.zoom().toFixed(5)}`);
+                addLog("--- SUCCESS ---", "#0f0");
 
-                // インタラクション設定
-                cy.on('mouseover tap', 'node', function(evt){
-                    const d = evt.target.data('rawData');
-                    log(`【選択中】ID:${d.id || d.Id} | Label:${d.label} | 原点座標(${d.x}, ${d.y})`, 'log-info');
+                cy.on('tap', 'node', function(evt){
+                    const d = evt.target.data('raw');
+                    addLog(`選択: ${d.label || d.id} (x:${d.x}, y:${d.y})`, "#0ff");
                 });
 
-            } catch (e) {
-                log("致命的なエラー: " + e.message, 'log-error');
-                console.error(e);
+            } catch (err) {
+                addLog("ERROR: " + err.message, "#f00");
+                console.error(err);
             }
         }
 
-        init();
+        start();
     </script>
 </body>
 </html>
