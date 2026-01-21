@@ -2,18 +2,17 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Network Fixed Final</title>
+    <title>Network Salvage Mode</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; font-family: monospace; background: #fff; }
+        body { margin: 0; overflow: hidden; font-family: monospace; background: #333; } /* 背景をグレーに */
         #log-panel { 
             position: absolute; top: 0; left: 0; width: 100%; height: 25%; 
             background: #000; color: #0f0; overflow-y: auto; z-index: 9999; 
             padding: 10px; font-size: 12px; border-bottom: 2px solid #555;
         }
         #cy { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
-        .log-info { color: #0ff; }
     </style>
 </head>
 <body>
@@ -30,50 +29,45 @@
             logPanel.scrollTop = logPanel.scrollHeight;
         }
 
-        // 実行開始直後に表示
-        addLog("--- SCRIPT STARTING ---", "#fff");
-
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
+        
+        // --- 視認性を上げるための巨大設定 ---
         const CONFIG = {
-            scale: 0.1,    // 座標の圧縮率（0.1 = 10分の1）
-            nodeSize: 1000, // 点の大きさ
-            fontSize: 800, // 文字の大きさ
-            edgeWidth: 5  // 線の太さ
+            scale: 1.0,      // 座標は一旦そのまま（6万なら6万の場所に置く）
+            nodeSize: 2000,  // 点を「超」巨大化
+            fontSize: 1500,  // 文字も「超」巨大化
+            edgeWidth: 20
         };
 
         async function start() {
             try {
-                addLog("通信準備中...");
+                addLog("サルベージ開始...");
                 const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
                 const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
 
-                addLog("ノードデータ取得開始...");
-                const resN = await fetch(nodeUrl);
-                const txtN = await resN.text();
-                const nodes = Papa.parse(txtN, {header:true, skipEmptyLines:true}).data;
-                addLog(`ノード解析完了: ${nodes.length}件`);
-
-                addLog("エッジデータ取得開始...");
-                const resE = await fetch(edgeUrl);
-                const txtE = await resE.text();
-                const edges = Papa.parse(txtE, {header:true, skipEmptyLines:true}).data;
-                addLog(`エッジ解析完了: ${edges.length}件`);
+                const [resN, resE] = await Promise.all([fetch(nodeUrl), fetch(edgeUrl)]);
+                const [txtN, txtE] = await Promise.all([resN.text(), resE.text()]);
+                
+                const nodesData = Papa.parse(txtN, {header:true, skipEmptyLines:true}).data;
+                const edgesData = Papa.parse(txtE, {header:true, skipEmptyLines:true}).data;
 
                 const elements = [];
                 const nodeIds = new Set();
 
-                nodes.forEach(n => {
+                nodesData.forEach(n => {
                     const id = (n.id || n.Id || "").trim();
+                    const x = parseFloat(n.x || 0);
+                    const y = parseFloat(n.y || 0);
                     if(!id) return;
                     elements.push({
                         group: 'nodes',
-                        data: { id, label: n.label || id, color: n.color || n.Color || '#1a73e8', raw: n },
-                        position: { x: parseFloat(n.x || 0) * CONFIG.scale, y: parseFloat(n.y || 0) * CONFIG.scale }
+                        data: { id, label: n.label || id, color: n.color || '#1a73e8', raw: n },
+                        position: { x: x * CONFIG.scale, y: y * CONFIG.scale }
                     });
                     nodeIds.add(id);
                 });
 
-                edges.forEach(e => {
+                edgesData.forEach(e => {
                     const s = (e.source || "").trim();
                     const t = (e.target || "").trim();
                     if(nodeIds.has(s) && nodeIds.has(t)) {
@@ -81,7 +75,6 @@
                     }
                 });
 
-                addLog("描画開始...");
                 const cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
@@ -89,29 +82,29 @@
                         { selector: 'node', style: {
                             'width': CONFIG.nodeSize, 'height': CONFIG.nodeSize,
                             'label': 'data(label)', 'font-size': CONFIG.fontSize,
-                            'background-color': 'data(color)', 'text-valign': 'bottom',
-                            'text-margin-y': 40, 'text-outline-width': 10, 'text-outline-color': '#fff'
+                            'background-color': 'data(color)', 'text-outline-width': 20, 'text-outline-color': '#fff'
                         }},
-                        { selector: 'edge', style: { 'width': CONFIG.edgeWidth, 'line-color': '#ccc', 'opacity': 0.4 }}
+                        { selector: 'edge', style: { 'width': CONFIG.edgeWidth, 'line-color': '#fff', 'opacity': 0.3 }}
                     ],
-                    layout: { name: 'preset' },
-                    autoungrabify: true
+                    layout: { name: 'preset' }
                 });
 
-                cy.fit(null, 500);
-                addLog("--- SUCCESS ---", "#0f0");
+                // --- ここが重要：特定のノードにズーム ---
+                if (cy.nodes().length > 0) {
+                    const firstNode = cy.nodes()[0];
+                    addLog(`Node[0] (${firstNode.id()}) へジャンプします座標: ${firstNode.position().x}, ${firstNode.position().y}`);
+                    
+                    // 最初のノードの場所にカメラを移動させてズームする
+                    cy.zoom(0.01); // 宇宙から見る
+                    cy.center(firstNode);
+                }
 
-                cy.on('tap', 'node', function(evt){
-                    const d = evt.target.data('raw');
-                    addLog(`選択: ${d.label || d.id} (x:${d.x}, y:${d.y})`, "#0ff");
-                });
+                addLog("SUCCESS: 画面をドラッグしたりズームして探してください", "#0f0");
 
             } catch (err) {
                 addLog("ERROR: " + err.message, "#f00");
-                console.error(err);
             }
         }
-
         start();
     </script>
 </body>
