@@ -47,15 +47,20 @@
                     log(`[サンプル] ID: ${data[0].id}, X: ${data[0].x}, Y: ${data[0].y}`, "log-val");
                 }
 
-                const elements = data.map((row, i) => {
-                    const x = parseFloat(row.x || 0);
+                    const elements = data.map((row, i) => {
+                    // 1. 座標をそのまま使う（または 0.1倍 などにして縮小する）
+                    // 元の数値が大きいので、掛け算は不要です。
+                    const x = parseFloat(row.x || 0); 
                     const y = parseFloat(row.y || 0);
-                    if(i < 3) log(`Node[${i}]計算座標: ${x}, ${y}`, "log-val");
                     
                     return {
                         group: 'nodes',
-                        data: { id: String(row.id || i), label: row.label || row.id, color: row.color || '#1a73e8' },
-                        position: { x: x, y: y }
+                        data: { 
+                            id: String(row.id || i), 
+                            label: row.label || row.id, 
+                            color: row.color || '#1a73e8' 
+                        },
+                        position: { x: x, y: y } // そのままの数値を使用
                     };
                 });
 
@@ -63,8 +68,28 @@
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
-                        { selector: 'node', style: { 'width': 30, 'height': 30, 'label': 'data(label)', 'background-color': 'data(color)', 'font-size': 12 } },
-                        { selector: 'edge', style: { 'width': 2, 'line-color': '#ccc' } }
+                        { 
+                            selector: 'node', 
+                            style: { 
+                                'width': 500,        // 座標が数万単位なので、点も大きく
+                                'height': 500, 
+                                'label': 'data(label)', 
+                                'background-color': 'data(color)', 
+                                'font-size': 400,    // 文字も大きく
+                                'text-valign': 'bottom',
+                                'text-margin-y': 100,
+                                'text-outline-width': 10,
+                                'text-outline-color': '#fff'
+                            } 
+                        },
+                        { 
+                            selector: 'edge', 
+                            style: { 
+                                'width': 50,         // 線も太く
+                                'line-color': '#ccc',
+                                'opacity': 0.5
+                            } 
+                        }
                     ],
                     layout: { name: 'preset' }
                 });
