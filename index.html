@@ -3,108 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Debugger</title>
+    <title>Network Viewer Fixed</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: monospace; }
-        /* デバッグログ表示エリア */
         #log-panel {
             position: absolute; top: 0; left: 0; width: 100%; height: 30%;
             background: rgba(0, 0, 0, 0.85); color: #00ff00;
             overflow-y: auto; z-index: 1000; font-size: 12px; padding: 10px;
             border-bottom: 2px solid #555; pointer-events: auto;
         }
-        /* グラフ表示エリア */
         #cy { position: absolute; top: 30%; left: 0; width: 100%; height: 70%; background-color: #fff; }
-        .log-entry { margin-bottom: 4px; border-bottom: 1px solid #333; }
-        .log-error { color: #ff4444; font-weight: bold; }
-        .log-success { color: #ffff00; }
+        .log-entry { margin-bottom: 2px; border-bottom: 1px solid #333; }
+        .log-info { color: #00ffff; font-weight: bold; }
     </style>
 </head>
 <body>
-
-    <div id="log-panel">
-        <div class="log-entry">--- DEBUG LOG START ---</div>
-    </div>
+    <div id="log-panel"><div class="log-entry">--- DEBUG & INFO LOG ---</div></div>
     <div id="cy"></div>
 
     <script>
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
-        const NODE_GID = '0';
-        const EDGE_GID = '1184231939';
+        const SCALE = 1000; // ここを書き換えるだけで倍率を調整できます
 
-        function log(msg, isError = false) {
+        function log(msg, type = '') {
             const panel = document.getElementById('log-panel');
             const div = document.createElement('div');
-            div.className = isError ? 'log-entry log-error' : 'log-entry';
+            div.className = 'log-entry ' + type;
             div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
             panel.appendChild(div);
             panel.scrollTop = panel.scrollHeight;
-            console.log(msg);
         }
 
         async function fetchData(url, name) {
-            log(`${name}をリクエスト中... URL: ${url}`);
-            try {
-                const response = await fetch(url);
-                log(`${name}レスポンス受信: ステータス ${response.status}`);
-                if (!response.ok) throw new Error(`HTTPエラー! ステータス: ${response.status}`);
-                
-                const text = await response.text();
-                log(`${name}データ受信完了 (${text.length} 文字)`);
-                
-                const parsed = Papa.parse(text, { 
-                    header: true, 
-                    skipEmptyLines: true, 
-                    transformHeader: h => h.trim().toLowerCase() 
-                });
-                
-                log(`${name}解析完了: ${parsed.data.length} 行検出`);
-                if (parsed.data.length > 0) {
-                    log(`${name} 1行目の項目: ${Object.keys(parsed.data[0]).join(', ')}`, true);
-                }
-                return parsed.data;
-            } catch (e) {
-                log(`${name}エラー: ${e.message}`, true);
-                throw e;
-            }
+            const response = await fetch(url);
+            const text = await response.text();
+            return Papa.parse(text, { header: true, skipEmptyLines: true, transformHeader: h => h.trim().toLowerCase() }).data;
         }
 
-                async function init() {
-            const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=${NODE_GID}`;
-            const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=${EDGE_GID}`;
+        async function init() {
+            const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
+            const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
 
             try {
                 const [nodesData, edgesData] = await Promise.all([
-                    fetchData(nodeUrl, "ノードシート"),
-                    fetchData(edgeUrl, "エッジシート")
+                    fetchData(nodeUrl, "ノード"),
+                    fetchData(edgeUrl, "エッジ")
                 ]);
 
-                log("データ検証 & 色の読み込み中...");
                 const elements = [];
                 const nodeIdSet = new Set();
 
-                // 1. ノードの登録
                 nodesData.forEach(row => {
-                    const id = row.id || row.Id;
+                    const id = String(row.id || row.Id || "").trim();
                     if (id) {
-                        const strId = String(id).trim();
                         elements.push({
                             group: 'nodes',
                             data: { 
-                                id: strId, 
+                                id: id, 
                                 label: row.label || id,
-                                // スプレッドシートの color 列（または Color 列）を反映。なければデフォルト青
-                                nodeColor: row.color || row.Color || '#1a73e8'
+                                nodeColor: row.color || row.Color || '#1a73e8',
+                                rawData: row // 全データを保持させておく
+                            },
+                            // 座標をSCALE倍して配置
+                            position: { 
+                                x: parseFloat(row.x || 0) * SCALE, 
+                                y: parseFloat(row.y || 0) * SCALE 
                             }
                         });
-                        nodeIdSet.add(strId);
+                        nodeIdSet.add(id);
                     }
                 });
 
-                // 2. エッジの登録
-                let ignoreCount = 0;
                 edgesData.forEach(row => {
                     const s = String(row.source || "").trim();
                     const t = String(row.target || "").trim();
@@ -113,71 +84,36 @@
                             group: 'edges',
                             data: { source: s, target: t }
                         });
-                    } else {
-                        ignoreCount++;
                     }
                 });
-
-                if (ignoreCount > 0) log(`警告: 存在しないIDへの接続を ${ignoreCount} 件スキップしました`, true);
-
-                log(`描画開始: ノード数 ${nodeIdSet.size}, エッジ数 ${elements.length - nodeIdSet.size}`);
 
                 const cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
-                        {
-                            selector: 'node',
-                            style: {
-                                'label': 'data(label)',
-                                'background-color': 'data(nodeColor)', // 読み込んだ色を反映
-                                'width': 15,
-                                'height': 15,
-                                'font-size': '10px',
-                                'text-valign': 'bottom',
-                                'text-margin-y': 4,
-                                'color': '#333',
-                                'text-wrap': 'wrap',
-                                'text-max-width': '80px'
-                            }
-                        },
-                        {
-                            selector: 'edge',
-                            style: {
-                                'width': 1.2,
-                                'line-color': '#ccc',
-                                'opacity': 0.3,
-                                'curve-style': 'bezier' // 密集対策として線を少しカーブさせる
-                            }
-                        }
+                        { selector: 'node', style: { 'label': 'data(label)', 'background-color': 'data(nodeColor)', 'width': 10, 'height': 10, 'font-size': '8px' } },
+                        { selector: 'edge', style: { 'width': 1, 'line-color': '#ccc', 'opacity': 0.3, 'curve-style': 'haystack' } }
                     ],
-                    layout: {
-                        name: 'cose',
-                        idealEdgeLength: 100, // 長いほどノード間が広がる（デフォルト32）
-                        nodeOverlap: 20,      // ノード同士の重なり許容
-                        refresh: 20,
-                        fit: true,
-                        padding: 50,
-                        randomize: false,
-                        componentSpacing: 150, // 独立した塊同士の距離
-                        nodeRepulsion: 10000,  // 反発力。大きくするとより広がる
-                        edgeElasticity: 100,
-                        nestingFactor: 5,
-                        gravity: 80,           // 重力。小さくすると外側に広がる
-                        numIter: 1000,
-                        initialTemp: 200,
-                        coolingFactor: 0.95,
-                        minTemp: 1.0
-                    }
+                    layout: { name: 'preset' }, // 固定配置モード
+                    autoungrabify: true // ノードのドラッグを禁止
                 });
 
-                log("完了！色とレイアウトを更新しました。");
+                // ポイント（ホバー）した時のイベント
+                cy.on('mouseover tap', 'node', function(evt){
+                    const data = evt.target.data('rawData');
+                    let info = "【ノード詳細】";
+                    for(let key in data) {
+                        info += ` ${key}: ${data[key]} |`;
+                    }
+                    log(info, 'log-info');
+                });
+
+                log(`表示完了: ${elements.length}件。ノードを触ると詳細が表示されます。倍率: ${SCALE}倍`);
 
             } catch (e) {
-                log("致命的エラー: " + e.message, true);
+                log("エラー: " + e.message, 'log-error');
             }
         }
-
         init();
     </script>
 </body>
