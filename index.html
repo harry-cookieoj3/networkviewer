@@ -2,11 +2,10 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Network Viewer - Final Colors</title>
+    <title>Network Viewer - Adjusted View</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        /* 背景を白に戻しました */
         body { margin: 0; overflow: hidden; font-family: monospace; background: #fff; } 
         #log-panel { 
             position: absolute; top: 0; left: 0; width: 100%; height: 20%; 
@@ -32,18 +31,22 @@
 
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
         
-        // 視認性と全体図を両立する設定
+        // --- 調整用パラメータ ---
         const CONFIG = {
             scale: 1.0,
-            nodeSize: 1500,  // 点のサイズ
-            fontSize: 1000,  // 文字のサイズ
-            edgeWidth: 15,   // 線の太さ
-            defaultColor: '#1a73e8'
+            nodeSize: 2200,  // ノードをさらに大きく調整 (前回の1500からアップ)
+            fontSize: 1200,  // 文字もあわせて少し大きく
+            edgeWidth: 20,   // 線も少し強調
+            defaultColor: '#1a73e8',
+            // 初期表示位置
+            centerX: 9370,   
+            centerY: 9140,
+            initialZoom: 0.008 // 少しアップにするための倍率 (数字を大きくすると寄ります)
         };
 
         async function start() {
             try {
-                addLog("色設定を反映して起動中...");
+                addLog("座標を調整して起動中...");
                 const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
                 const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
 
@@ -59,8 +62,6 @@
                 nodesData.forEach(n => {
                     const id = (n.id || n.Id || "").trim();
                     if(!id) return;
-                    
-                    // スプレッドシートのcolor列があれば採用、なければデフォルト青
                     const nColor = n.color || n.Color || CONFIG.defaultColor;
 
                     elements.push({
@@ -86,8 +87,8 @@
                         { selector: 'node', style: {
                             'width': CONFIG.nodeSize, 'height': CONFIG.nodeSize,
                             'label': 'data(label)', 'font-size': CONFIG.fontSize,
-                            'background-color': 'data(color)', // ここで個別の色を反映
-                            'text-outline-width': 15, 'text-outline-color': '#fff',
+                            'background-color': 'data(color)',
+                            'text-outline-width': 20, 'text-outline-color': '#fff',
                             'color': '#000', 'font-weight': 'bold'
                         }},
                         { selector: 'edge', style: { 
@@ -101,11 +102,16 @@
                     autoungrabify: true
                 });
 
-                if (cy.nodes().length > 0) {
-                    // 全体が収まるように自動調整（余白300px）
-                    cy.fit(null, 300);
-                    addLog(`全体図を表示しました（ズーム倍率: ${cy.zoom().toFixed(5)}）`, "#0f0");
-                }
+                // 指定した座標を中心に、少しズームした状態で表示
+                cy.viewport({
+                    zoom: CONFIG.initialZoom,
+                    pan: { 
+                        x: cy.width() / 2 - CONFIG.centerX * CONFIG.initialZoom, 
+                        y: cy.height() / 2 - CONFIG.centerY * CONFIG.initialZoom 
+                    }
+                });
+
+                addLog(`中心座標(${CONFIG.centerX}, ${CONFIG.centerY})付近を表示しました`, "#0f0");
 
                 cy.on('tap', 'node', function(evt){
                     const d = evt.target.data('raw');
