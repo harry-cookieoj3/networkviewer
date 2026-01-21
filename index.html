@@ -1,44 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 0; overflow: hidden; }
+        #cy { width: 100vw; height: 100vh; display: block; background-color: #f9f9f9; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; background: white; padding: 10px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+
+    <div id="loading">データを読み込み中...</div>
+    <div id="cy"></div>
+
+    <script>
+        const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
+        const CSV_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/export?format=csv`;
+
         async function init() {
             try {
-                // キャッシュを避けるためにタイムスタンプを追加
                 const response = await fetch(CSV_URL + '&t=' + new Date().getTime());
-                const csvText = await response.text();
+                if (!response.ok) throw new Error("Google Driveへのアクセスに失敗しました。");
                 
+                const csvText = await response.text();
                 const results = Papa.parse(csvText, { header: true, skipEmptyLines: true });
                 const data = results.data;
 
-                // 読み込んだデータをコンソール（デバッグ用）に出力
-                console.log("Loaded data:", data);
-
                 const elements = [];
                 data.forEach(row => {
-                    // 列名が Id か id か不明なため、両方に対応
                     const id = row.Id || row.id || row.ID;
                     const label = row.Label || row.label || row.name || id;
                     
                     if (id) {
                         elements.push({
                             data: { 
-                                id: id, 
-                                label: label,
+                                id: String(id), 
+                                label: String(label),
                                 color: row.Color || row.color || '#666'
                             },
-                            // x, y がない場合も想定してデフォルト値を設定
                             position: { 
-                                x: row.x ? parseFloat(row.x) : Math.random() * 1000, 
-                                y: row.y ? parseFloat(row.y) : Math.random() * 1000 
+                                x: row.x ? parseFloat(row.x) : Math.random() * 800, 
+                                y: row.y ? parseFloat(row.y) : Math.random() * 600 
                             }
                         });
                     }
                 });
 
                 if (elements.length === 0) {
-                    throw new Error("データが空か、列名が一致しません。");
+                    throw new Error("CSVデータが正しく読み込めませんでした。列名を確認してください。");
                 }
 
                 document.getElementById('loading').style.display = 'none';
 
-                const cy = cytoscape({
+                cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
@@ -49,16 +67,29 @@
                                 'background-color': 'data(color)',
                                 'width': 20,
                                 'height': 20,
-                                'font-size': '10px'
+                                'font-size': '10px',
+                                'text-valign': 'center',
+                                'text-halign': 'right'
                             }
+                        },
+                        {
+                            selector: 'edge',
+                            style: { 'width': 1, 'line-color': '#ccc' }
                         }
                     ],
                     layout: { 
-                        name: (data[0] && data[0].x) ? 'preset' : 'grid' 
-                    }
+                        name: (data[0] && data[0].x) ? 'preset' : 'grid',
+                        padding: 50
+                    },
+                    wheelSensitivity: 0.2
                 });
 
             } catch (e) {
                 document.getElementById('loading').innerText = "エラー: " + e.message;
             }
         }
+
+        init();
+    </script>
+</body>
+</html>
