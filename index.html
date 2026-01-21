@@ -48,8 +48,8 @@
                 }
 
                 const elements = data.map((row, i) => {
-                    const x = parseFloat(row.x || 0);
-                    const y = parseFloat(row.y || 0);
+                    const x = parseFloat(row.x || 0) * 50;
+                    const y = parseFloat(row.y || 0) * 50;
                     if(i < 3) log(`Node[${i}]計算座標: ${x}, ${y}`, "log-val");
                     
                     return {
