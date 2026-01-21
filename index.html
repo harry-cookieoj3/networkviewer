@@ -47,10 +47,12 @@
                     log(`[サンプル] ID: ${data[0].id}, X: ${data[0].x}, Y: ${data[0].y}`, "log-val");
                 }
 
-                    const elements = data.map((row, i) => {
-                    // 1. 座標をそのまま使う（または 0.1倍 などにして縮小する）
-                    // 元の数値が大きいので、掛け算は不要です。
-                    const x = parseFloat(row.x || 0); 
+                    : { name: 'preset' }
+                });
+            
+                const elements = data.map((row, i) => {
+                    // 座標はそのまま（66562などの大きな値）を使用
+                    const x = parseFloat(row.x || 0);
                     const y = parseFloat(row.y || 0);
                     
                     return {
@@ -58,9 +60,10 @@
                         data: { 
                             id: String(row.id || i), 
                             label: row.label || row.id, 
-                            color: row.color || '#1a73e8' 
+                            color: row.color || '#1a73e8',
+                            rawData: row 
                         },
-                        position: { x: x, y: y } // そのままの数値を使用
+                        position: { x: x, y: y }
                     };
                 });
 
@@ -71,27 +74,40 @@
                         { 
                             selector: 'node', 
                             style: { 
-                                'width': 500,        // 座標が数万単位なので、点も大きく
-                                'height': 500, 
+                                'width': 3000,          // 座標の大きさに負けない巨大な点
+                                'height': 3000, 
                                 'label': 'data(label)', 
                                 'background-color': 'data(color)', 
-                                'font-size': 400,    // 文字も大きく
+                                'font-size': 2000,      // 巨大な文字
                                 'text-valign': 'bottom',
-                                'text-margin-y': 100,
-                                'text-outline-width': 10,
-                                'text-outline-color': '#fff'
+                                'text-margin-y': 500,
+                                'text-outline-width': 50,
+                                'text-outline-color': '#fff',
+                                'color': '#000'
                             } 
                         },
                         { 
                             selector: 'edge', 
                             style: { 
-                                'width': 50,         // 線も太く
-                                'line-color': '#ccc',
-                                'opacity': 0.5
+                                'width': 300,           // 太い線
+                                'line-color': '#ccc', 
+                                'opacity': 0.4,
+                                'curve-style': 'haystack'
                             } 
                         }
                     ],
-                    layout: { name: 'preset' }
+                    layout: { name: 'preset' },
+                    autoungrabify: true
+                });
+
+                // 全体を画面に収める
+                cy.fit(null, 2000); // 余裕（パディング）を持って表示
+                log(`描画完了。ズーム倍率: ${cy.zoom().toFixed(6)}`);
+
+                // ホバー時にログを出す（確認用）
+                cy.on('mouseover tap', 'node', function(evt){
+                    const d = evt.target.data('rawData');
+                    log(`【詳細】ID:${d.id} Label:${d.label} (x:${d.x}, y:${d.y})`, 'log-info');
                 });
 
                 // 【最重要】データが存在する場所にカメラを強制移動
