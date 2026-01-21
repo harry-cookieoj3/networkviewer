@@ -17,10 +17,11 @@
     <div id="cy"></div>
 
     <script>
+
         const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
-        // 確認済みのダウンロードURL
-        const NODE_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/export?format=csv&gid=0`;
-        const EDGE_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/export?format=csv&gid=1184231939`;
+        // /gviz/tq 形式を使うことで、ブラウザのセキュリティブロックを回避しやすくなります
+        const NODE_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
+        const EDGE_URL = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
 
         async function fetchData(url) {
             const response = await fetch(url);
