@@ -39,6 +39,7 @@
         .btn { padding: 10px; background: #333; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
         .btn:hover { background: #000; }
 
+        /* サイドパネル基本設定 (PC) */
         #side-panel {
             position: absolute; right: -400px; top: 0; width: 350px; height: calc(100% - 100px);
             background: rgba(255, 255, 255, 0.98); box-shadow: -5px 0 15px rgba(0,0,0,0.1);
@@ -48,6 +49,22 @@
         #side-panel.open { right: 0; }
         .panel-close { align-self: flex-end; cursor: pointer; font-size: 24px; font-weight: bold; color: #999; }
         
+        /* ボタンコンテナ (PC/スマホ共通) */
+        .button-container { display: flex; gap: 10px; margin-top: 10px; width: 100%; }
+        
+        .play-this-btn { 
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            background: #1DB954; color: white; text-decoration: none; border-radius: 8px; 
+            font-weight: bold; cursor: pointer; border: none; font-size: 14px; transition: 0.2s; min-height: 44px;
+        }
+        .play-this-btn:hover { background: #1ed760; }
+        
+        .lastfm-btn { 
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            background: #ba0000; color: white; text-decoration: none; border-radius: 8px; 
+            font-size: 14px; font-weight: bold; min-height: 44px;
+        }
+
         #fixed-player {
             position: absolute; bottom: 15px; right: 15px; width: 350px; min-height: 80px;
             z-index: 300; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);
@@ -57,61 +74,27 @@
 
         @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-        .play-this-btn { 
-            display: block; padding: 15px; background: #1DB954; color: white; 
-            text-decoration: none; border-radius: 8px; text-align: center; 
-            font-weight: bold; cursor: pointer; border: none; font-size: 16px; transition: 0.2s;
-        }
-        .play-this-btn:hover { background: #1ed760; transform: scale(1.02); }
-        .lastfm-btn { display: block; padding: 10px; background: #ba0000; color: white; text-decoration: none; border-radius: 8px; text-align: center; font-size: 14px; }
-
+        /* スマホ専用の微調整 */
         @media screen and (max-width: 768px) {
-            /* パネルを「全画面」ではなく「下部に浮くカード」に変更 */
             #side-panel {
-                right: 15px;
-                left: 15px;
-                bottom: -100%;
-                top: auto;
-                width: calc(100% - 30px);
-                height: auto;           /* 内容に応じた高さに */
-                max-height: 35vh;       /* 画面の35%以上は広がらない */
-                border-radius: 12px;
-                padding: 15px;
-                box-shadow: 0 -5px 25px rgba(0,0,0,0.15);
-                border: 1px solid #eee;
+                right: 15px; left: 15px; bottom: -100%; top: auto;
+                width: calc(100% - 30px); height: auto; max-height: 30vh;
+                border-radius: 12px; padding: 15px;
             }
-            #side-panel.open {
-                bottom: 100px; /* プレイヤー(80px)+余白(20px)の上に配置 */
-            }
-        
-            /* パネル内のタイトルとボタンを小さく */
-            #panel-title { font-size: 18px !important; margin-bottom: 5px !important; }
-            
-            .play-this-btn { 
-                padding: 10px;      /* 15px → 10px に縮小 */
-                font-size: 14px;    /* 16px → 14px に縮小 */
-            }
-            
-            .lastfm-btn {
-                padding: 8px;
-                font-size: 12px;
-            }
-        
-            /* 固定プレイヤーも少しスリムに */
-            #fixed-player {
-                width: calc(100% - 30px);
-                left: 15px;
-                bottom: 10px;
-                height: 80px;
-            }
+            #side-panel.open { bottom: 100px; }
+            #panel-title { font-size: 18px !important; }
+            .button-container { gap: 8px; }
+            .play-this-btn, .lastfm-btn { font-size: 13px !important; padding: 8px 4px !important; }
+            #fixed-player { width: calc(100% - 30px); left: 15px; bottom: 10px; }
         }
+        
         #status-log { position: absolute; bottom: 5px; left: 5px; z-index: 100; background: rgba(0,0,0,0.6); color: #0f0; padding: 5px 10px; font-size: 10px; border-radius: 3px; pointer-events: none; }
     </style>
 </head>
 <body>
 
     <div id="ui-layer">
-        <a href="https://your-info-page-url.com" target="_blank" class="info-link">
+        <a href="https://note.com/ready_yucca1038/n/n7ee11797c256?sub_rt=share_pw" target="_blank" class="info-link">
             <span class="info-icon">?</span> このアプリについて
         </a>
         <div class="search-container">
@@ -125,8 +108,7 @@
         <span class="panel-close" onclick="closePanel()">×</span>
         <h2 id="panel-title" style="margin: 0; font-size: 24px;">Artist Name</h2>
         <div id="play-btn-area"></div>
-        <div id="link-area"></div>
-    </div>
+        <div id="link-area"></div> </div>
 
     <div id="fixed-player">
         <div id="spotify-container"></div>
@@ -184,7 +166,7 @@
                     container: document.getElementById('cy'),
                     elements: elements,
                     minZoom: 0.001, maxZoom: 0.1,
-                    autoungrabify: true, // ドラッグ禁止を適用
+                    autoungrabify: true,
                     style: [
                         { selector: 'node', style: { 'width': 'data(size)', 'height': 'data(size)', 'label': 'data(label)', 'font-size': CONFIG.baseFontSize, 'background-color': 'data(color)', 'text-outline-width': 20, 'text-outline-color': '#fff' }},
                         { selector: 'edge', style: { 'width': CONFIG.edgeWidth, 'line-color': '#ccc', 'opacity': 0.2, 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'target-arrow-color': '#ccc' }},
@@ -196,7 +178,11 @@
                     layout: { name: 'preset' }
                 });
 
-                cy.on('tap', 'node', function(e){ selectNode(e.target); openPanel(e.target.data()); });
+                // タップ時にハイライトとパネル表示を実行
+                cy.on('tap', 'node', function(e){ 
+                    selectNode(e.target); 
+                    openPanel(e.target.data()); 
+                });
 
                 searchInput.addEventListener('input', (e) => {
                     const val = e.target.value.toLowerCase();
@@ -213,7 +199,8 @@
                             div.className = 'search-item'; div.innerText = m.data('label');
                             div.onmousedown = (ev) => {
                                 ev.preventDefault();
-                                selectNode(m); openPanel(m.data());
+                                selectNode(m); 
+                                openPanel(m.data());
                                 cy.animate({ center: { eles: m }, zoom: 0.02 }, { duration: 1000 });
                                 searchResults.style.display = 'none'; searchInput.value = m.data('label');
                             };
@@ -238,23 +225,28 @@
             });
             node.neighborhood().nodes().removeClass('faded');
         }
-
+        
         function openPanel(data) {
             document.getElementById('panel-title').innerText = data.label;
-            const playArea = document.getElementById('play-btn-area');
-            const linkArea = document.getElementById('link-area');
+            let html = '<div class="button-container">';
             
             if (data.spotify_id && data.spotify_id.length > 10) {
                 const cleanId = String(data.spotify_id).replace('spotify:artist:', '').trim();
-                playArea.innerHTML = `<button class="play-this-btn" onclick="setPlayer('${cleanId}')">▶ このアーティストを再生</button>`;
+                html += `<button class="play-this-btn" onclick="setPlayer('${cleanId}')">Spotifyで聴く</button>`;
             } else {
-                playArea.innerHTML = `<button class="play-this-btn" style="background:#ccc; cursor:not-allowed;" disabled>Spotify ID未登録</button>`;
+                html += `<button class="play-this-btn" style="background:#ccc; cursor:not-allowed;" disabled>再生不可</button>`;
             }
-
-            linkArea.innerHTML = data.url_lastfm ? `<a href="${data.url_lastfm}" target="_blank" class="lastfm-btn">Last.fm で詳しく見る</a>` : '';
+            
+            if (data.url_lastfm) {
+                html += `<a href="${data.url_lastfm}" target="_blank" class="lastfm-btn">Last.fm 詳細</a>`;
+            }
+            html += '</div>';
+            
+            document.getElementById('play-btn-area').innerHTML = html;
+            document.getElementById('link-area').innerHTML = '';
             sidePanel.classList.add('open');
         }
-
+          
         function setPlayer(id) {
             const container = document.getElementById('spotify-container');
             container.innerHTML = `<iframe src="https://open.spotify.com/embed/artist/${id}?utm_source=generator" width="100%" height="80" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>`;
@@ -264,16 +256,12 @@
         function closePanel() { sidePanel.classList.remove('open'); }
         
         function resetSelection() {
-            // 1. 現在ハイライトされている要素があるかチェック
             const hasSelection = cy.elements('.highlight-node').length > 0;
-        
             if (hasSelection) {
-                // 【ハイライト中】選択状態の解除のみ（視点は維持）
                 closePanel();
                 cy.elements().removeClass('faded highlight-node edge-out edge-in');
                 searchInput.value = '';
             } else {
-                // 【通常時】全体表示に戻す
                 closePanel();
                 adjustView(true);
             }
