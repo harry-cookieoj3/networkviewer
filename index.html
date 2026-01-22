@@ -145,7 +145,7 @@
                             div.onmousedown = (ev) => {
                                 ev.preventDefault();
                                 selectNode(m);
-                                cy.animate({ center: { eles: m }, zoom: 0.05 }, { duration: 1000 });
+                                cy.animate({ center: { eles: m }, zoom: 0.03 }, { duration: 1000 });
                                 searchResults.style.display = 'none';
                                 searchInput.value = m.data('label');
                             };
