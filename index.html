@@ -62,25 +62,26 @@
         <button class="btn" onclick="resetSelection()">全体を表示 / 解除</button>
     </div>
 
-    <div id="side-panel">
-        <span class="panel-close" onclick="closePanel()">×</span>
-        <h2 id="panel-title" style="margin: 0;">Artist Name</h2>
+
+        <div id="side-panel">
+            <span class="panel-close" onclick="closePanel()">×</span>
+            <h2 id="panel-title" style="margin: 0;">Artist Name</h2>
+            
+            <div id="link-area"></div>
         
-        <div id="link-area"></div>
-
-        <div id="tour-control">
-            <div class="tour-header">
-                <span class="tour-label">🔄 ネットワーク巡回モード</span>
-                <input type="checkbox" id="tour-switch" style="width: 18px; height: 18px;">
+            <div id="tour-control">
+                <label class="tour-header" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                    <span class="tour-label">🔄 ツアー再生モード</span>
+                    <input type="checkbox" id="tour-switch" style="width: 20px; height: 20px; cursor: pointer;">
+                </label>
+                <div id="tour-status">
+                    移動まで: <span id="timer-count" style="font-weight: bold; color: #333;">60</span>秒
+                    <button class="jump-btn" onclick="jumpNextNode()">すぐに次へ</button>
+                </div>
             </div>
-            <div id="tour-status">
-                移動まで: <span id="timer-count" style="font-weight: bold; color: #333;">60</span>秒
-                <button class="jump-btn" onclick="jumpNextNode()">すぐに次へ</button>
-            </div>
+        
+            <div id="spotify-area"></div>
         </div>
-
-        <div id="spotify-area"></div>
-    </div>
 
     <div id="status-log">Initializing...</div>
     <div id="cy"></div>
