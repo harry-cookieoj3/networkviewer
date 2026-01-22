@@ -2,155 +2,220 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Live Idol Network Viewer - Focus 1st Degree</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Idol Network Viewer - Player Decoupled</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; font-family: monospace; background: #fff; } 
-        #log-panel { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 18%; 
-            background: rgba(0,0,0,0.85); color: #0f0; overflow-y: auto; z-index: 9999; 
-            padding: 10px; font-size: 11px; border-bottom: 2px solid #555;
-        }
+        body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #333; }
         #cy { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        
+        /* UI層 */
+        #ui-layer {
+            position: absolute; top: 15px; left: 15px; z-index: 100;
+            display: flex; flex-direction: column; gap: 8px; width: 280px;
+        }
+        .search-container { position: relative; }
+        #node-search {
+            width: 100%; padding: 12px; border: 2px solid #333; border-radius: 8px; font-size: 16px; box-sizing: border-box; outline: none;
+        }
+        #search-results {
+            position: absolute; top: 100%; left: 0; width: 100%; background: #fff; border: 1px solid #ccc; max-height: 200px; overflow-y: auto; display: none; z-index: 101;
+        }
+        .search-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; }
+        .btn { padding: 10px; background: #333; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+
+        /* サイドパネル（情報のみ） */
+        #side-panel {
+            position: absolute; right: -400px; top: 0; width: 350px; height: calc(100% - 100px);
+            background: rgba(255, 255, 255, 0.98); box-shadow: -5px 0 15px rgba(0,0,0,0.1);
+            z-index: 200; transition: 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 15px; overflow-y: auto;
+        }
+        #side-panel.open { right: 0; }
+        .panel-close { align-self: flex-end; cursor: pointer; font-size: 24px; font-weight: bold; color: #999; }
+        
+        /* 固定プレイヤー（右下） */
+        #fixed-player {
+            position: absolute; bottom: 15px; right: 15px; width: 350px; min-height: 80px;
+            z-index: 300; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            overflow: hidden; display: none; /* 初期は非表示 */
+        }
+        #fixed-player.visible { display: block; }
+
+        .play-this-btn { 
+            display: block; padding: 15px; background: #1DB954; color: white; 
+            text-decoration: none; border-radius: 8px; text-align: center; 
+            font-weight: bold; cursor: pointer; border: none; font-size: 16px;
+        }
+        .play-this-btn:hover { background: #1ed760; }
+        .lastfm-btn { display: block; padding: 10px; background: #ba0000; color: white; text-decoration: none; border-radius: 8px; text-align: center; font-size: 14px; }
+
+        @media screen and (max-width: 768px) {
+            #side-panel { right: 0; bottom: -100%; top: auto; width: 100%; height: 50%; border-radius: 20px 20px 0 0; }
+            #side-panel.open { bottom: 80px; }
+            #fixed-player { width: calc(100% - 30px); left: 15px; bottom: 10px; }
+        }
+        #status-log { position: absolute; bottom: 5px; left: 5px; z-index: 100; background: rgba(0,0,0,0.6); color: #0f0; padding: 5px 10px; font-size: 10px; border-radius: 3px; pointer-events: none; }
     </style>
 </head>
 <body>
-    <div id="log-panel"></div>
+
+    <div id="ui-layer">
+        <div class="search-container">
+            <input type="text" id="node-search" placeholder="アーティスト検索..." autocomplete="off">
+            <div id="search-results"></div>
+        </div>
+        <button class="btn" onclick="resetSelection()">全体を表示 / 解除</button>
+    </div>
+
+    <div id="side-panel">
+        <span class="panel-close" onclick="closePanel()">×</span>
+        <h2 id="panel-title" style="margin: 0;">Artist Name</h2>
+        <div id="play-btn-area"></div>
+        <div id="link-area"></div>
+        <div id="info-area" style="font-size: 14px; color: #555;"></div>
+    </div>
+
+    <div id="fixed-player">
+        <div id="spotify-container"></div>
+    </div>
+
+    <div id="status-log">Initializing...</div>
     <div id="cy"></div>
 
     <script>
-        const logPanel = document.getElementById('log-panel');
-        function addLog(msg, color='') {
-            const div = document.createElement('div');
-            div.style.color = color;
-            div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            logPanel.appendChild(div);
-            logPanel.scrollTop = logPanel.scrollHeight;
-        }
+        let cy;
+        const logEl = document.getElementById('status-log');
+        const searchInput = document.getElementById('node-search');
+        const searchResults = document.getElementById('search-results');
+        const sidePanel = document.getElementById('side-panel');
+        const fixedPlayer = document.getElementById('fixed-player');
 
-        const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
-        
         const CONFIG = {
-            scale: 1.0,
-            baseNodeSize: 225, 
-            baseFontSize: 1000,
-            edgeWidth: 25,
-            defaultColor: '#1a73e8',
-            centerX: 9370,   
-            centerY: 9140,   
-            initialZoom: 0.005
+            gasUrl: "https://script.google.com/macros/s/AKfycbxLSa95r08HRbuQhEWUgVSUSeSaUmJxpA8fRZ4NVAbiGLhVA3kFkEdbEVIvlr2HWcAn/exec", 
+            token: "my-secret-token-2026",
+            baseNodeSize: 225, baseFontSize: 1500, edgeWidth: 35
         };
 
-        async function start() {
-            try {
-                addLog("1階層強調・ドラッグ禁止版をロード中...");
-                const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
-                const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
+        function addLog(msg) { logEl.innerText = msg; }
 
-                const [resN, resE] = await Promise.all([fetch(nodeUrl), fetch(edgeUrl)]);
-                const [txtN, txtE] = await Promise.all([resN.text(), resE.text()]);
-                
-                const nodesData = Papa.parse(txtN, {header:true, skipEmptyLines:true}).data;
-                const edgesData = Papa.parse(txtE, {header:true, skipEmptyLines:true}).data;
+        function adjustView(animate = true) {
+            if (!cy) return;
+            const isMobile = window.innerWidth < 768;
+            cy.animate({ fit: { eles: cy.elements(), padding: isMobile ? 30 : 60 } }, { duration: animate ? 600 : 0 });
+        }
+
+        async function start() {
+            addLog("データ取得中...");
+            try {
+                const response = await fetch(`${CONFIG.gasUrl}?token=${CONFIG.token}`, { redirect: 'follow' });
+                const fullData = await response.json();
 
                 const elements = [];
-                const nodeIds = new Set();
-
-                nodesData.forEach(n => {
-                    const id = (n.id || n.Id || "").trim();
-                    if(!id) return;
-                    
-                    const valSize = parseFloat(n.size || n.Size || 10);
-                    const nSize = valSize * CONFIG.baseNodeSize;
-                    const nColor = n.color || n.Color || CONFIG.defaultColor;
-
+                fullData.nodes.forEach(n => {
                     elements.push({
                         group: 'nodes',
-                        data: { id, label: n.label || id, color: nColor, size: nSize, raw: n },
-                        position: { x: parseFloat(n.x || 0), y: -parseFloat(n.y || 0) }
+                        data: { id: String(n.id), label: n.label, color: n.color, size: parseFloat(n.size) * CONFIG.baseNodeSize, spotify_id: n.spotify_id, url_lastfm: n.url_lastfm },
+                        position: { x: parseFloat(n.x), y: -parseFloat(n.y) }
                     });
-                    nodeIds.add(id);
                 });
 
-                edgesData.forEach(e => {
-                    const s = (e.source || "").trim();
-                    const t = (e.target || "").trim();
-                    if(nodeIds.has(s) && nodeIds.has(t)) {
+                const nodeIds = new Set(fullData.nodes.map(n => String(n.id)));
+                fullData.edges.forEach(e => {
+                    const s = String(e.source); const t = String(e.target);
+                    if (s !== t && nodeIds.has(s) && nodeIds.has(t)) {
                         elements.push({ group: 'edges', data: { source: s, target: t } });
                     }
                 });
 
-                const cy = cytoscape({
+                cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
+                    minZoom: 0.001, maxZoom: 0.1,
                     style: [
-                        { selector: 'node', style: {
-                            'width': 'data(size)', 'height': 'data(size)',
-                            'label': 'data(label)', 'font-size': CONFIG.baseFontSize,
-                            'background-color': 'data(color)',
-                            'text-outline-width': 20, 'text-outline-color': '#fff',
-                            'color': '#000', 'font-weight': 'bold',
-                            'transition-property': 'opacity, font-size, text-outline-width',
-                            'transition-duration': '0.3s'
-                        }},
-                        { selector: 'edge', style: { 
-                            'width': CONFIG.edgeWidth, 
-                            'line-color': '#999', 
-                            'opacity': 0.3,
-                            'curve-style': 'haystack',
-                            'transition-property': 'opacity, width, line-color',
-                            'transition-duration': '0.3s'
-                        }},
-                        { selector: '.faded', style: { 'opacity': 0.03, 'text-opacity': 0 }},
-                        { selector: '.highlight', style: {
-                            'opacity': 1,
-                            'font-size': CONFIG.baseFontSize * 1.8,
-                            'text-outline-width': 40,
-                            'z-index': 999
-                        }},
-                        { selector: '.edge-highlight', style: {
-                            'opacity': 1, 'width': CONFIG.edgeWidth * 2.5, 'line-color': '#222', 'z-index': 998
-                        }}
+                        { selector: 'node', style: { 'width': 'data(size)', 'height': 'data(size)', 'label': 'data(label)', 'font-size': CONFIG.baseFontSize, 'background-color': 'data(color)', 'text-outline-width': 20, 'text-outline-color': '#fff' }},
+                        { selector: 'edge', style: { 'width': CONFIG.edgeWidth, 'line-color': '#ccc', 'opacity': 0.2, 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'target-arrow-color': '#ccc' }},
+                        { selector: '.faded', style: { 'opacity': 0.05, 'text-opacity': 0 }},
+                        { selector: '.highlight-node', style: { 'z-index': 999, 'border-width': 60, 'border-color': '#000' }},
+                        { selector: '.edge-out', style: { 'line-color': 'red', 'target-arrow-color': 'red', 'opacity': 1 }},
+                        { selector: '.edge-in', style: { 'line-color': 'blue', 'target-arrow-color': 'blue', 'opacity': 1 }}
                     ],
-                    layout: { name: 'preset' },
-                    autoungrabify: true
+                    layout: { name: 'preset' }
                 });
 
-                cy.viewport({
-                    zoom: CONFIG.initialZoom,
-                    pan: { 
-                        x: cy.width() / 2 - CONFIG.centerX * CONFIG.initialZoom, 
-                        y: cy.height() / 2 - (-CONFIG.centerY) * CONFIG.initialZoom 
-                    }
+                cy.on('tap', 'node', function(e){ selectNode(e.target); openPanel(e.target.data()); });
+
+                searchInput.addEventListener('input', (e) => {
+                    const val = e.target.value.toLowerCase();
+                    searchResults.innerHTML = '';
+                    if (!val) { searchResults.style.display = 'none'; return; }
+                    const matches = cy.nodes().filter(n => {
+                        const lbl = n.data('label');
+                        return lbl && typeof lbl === 'string' && lbl.toLowerCase().includes(val);
+                    });
+                    if (matches.length > 0) {
+                        searchResults.style.display = 'block';
+                        matches.slice(0, 10).forEach(m => {
+                            const div = document.createElement('div');
+                            div.className = 'search-item'; div.innerText = m.data('label');
+                            div.onmousedown = (ev) => {
+                                ev.preventDefault();
+                                selectNode(m); openPanel(m.data());
+                                cy.animate({ center: { eles: m }, zoom: 0.02 }, { duration: 1000 });
+                                searchResults.style.display = 'none'; searchInput.value = m.data('label');
+                            };
+                            searchResults.appendChild(div);
+                        });
+                    } else { searchResults.style.display = 'none'; }
                 });
 
-                // --- 1階層フォーカス機能 (戻しました) ---
-                cy.on('tap', 'node', function(e){
-                    const node = e.target;
-                    // 直接の隣人（1階層）と自分自身のみを取得
-                    const neighborhood = node.neighborhood().add(node);
-
-                    addLog(`フォーカス(1階層): ${node.data('label')}`, "#0ff");
-
-                    cy.elements().addClass('faded').removeClass('highlight edge-highlight');
-                    neighborhood.removeClass('faded').addClass('highlight');
-                    node.connectedEdges().removeClass('faded').addClass('edge-highlight');
-                });
-
-                cy.on('tap', function(e){
-                    if( e.target === cy ){
-                        addLog("フォーカス解除", "#aaa");
-                        cy.elements().removeClass('faded highlight edge-highlight');
-                    }
-                });
-
-                addLog("準備完了。ノードは固定、クリックで直接の接続先を強調します。");
-
-            } catch (err) {
-                addLog("エラー: " + err.message, "#f00");
-            }
+                adjustView(false);
+                addLog(`描画完了: ${fullData.nodes.length} nodes`);
+            } catch (err) { addLog("Error: " + err.message); }
         }
+
+        function selectNode(node) {
+            const id = node.id();
+            cy.elements().addClass('faded').removeClass('highlight-node edge-out edge-in');
+            node.removeClass('faded').addClass('highlight-node');
+            node.connectedEdges().forEach(edge => {
+                edge.removeClass('faded');
+                if (edge.source().id() === id) edge.addClass('edge-out');
+                else edge.addClass('edge-in');
+            });
+            node.neighborhood().nodes().removeClass('faded');
+        }
+
+        function openPanel(data) {
+            document.getElementById('panel-title').innerText = data.label;
+            const playArea = document.getElementById('play-btn-area');
+            const linkArea = document.getElementById('link-area');
+            
+            // 再生ボタン
+            if (data.spotify_id && data.spotify_id.length > 10) {
+                const cleanId = String(data.spotify_id).replace('spotify:artist:', '').trim();
+                playArea.innerHTML = `<button class="play-this-btn" onclick="setPlayer('${cleanId}')">▶ このアーティストを再生</button>`;
+            } else {
+                playArea.innerHTML = `<button class="play-this-btn" style="background:#ccc; cursor:not-allowed;" disabled>Spotify ID未登録</button>`;
+            }
+
+            // リンク
+            linkArea.innerHTML = data.url_lastfm ? `<a href="${data.url_lastfm}" target="_blank" class="lastfm-btn">Last.fm で詳しく見る</a>` : '';
+            
+            sidePanel.classList.add('open');
+        }
+
+        function setPlayer(id) {
+            const container = document.getElementById('spotify-container');
+            container.innerHTML = `<iframe src="https://open.spotify.com/embed/artist/${id}?utm_source=generator" width="100%" height="80" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>`;
+            fixedPlayer.classList.add('visible');
+        }
+
+        function closePanel() { sidePanel.classList.remove('open'); }
+
+        function resetSelection() { closePanel(); cy.elements().removeClass('faded highlight-node edge-out edge-in'); searchInput.value = ''; adjustView(true); }
+
+        window.addEventListener('resize', () => { adjustView(true); });
         start();
     </script>
 </body>
