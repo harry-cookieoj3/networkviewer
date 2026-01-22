@@ -9,18 +9,15 @@
         body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #333; }
         #cy { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
         
-        /* UI層 */
         #ui-layer {
             position: absolute; top: 15px; left: 15px; z-index: 100;
             display: flex; flex-direction: column; gap: 8px; width: 280px;
         }
 
-        /* アプリ説明リンク（案1: 左上） */
         .info-link {
             display: inline-flex; align-items: center; gap: 6px;
             color: #555; text-decoration: none; font-size: 13px; font-weight: bold;
-            margin-bottom: 2px; transition: 0.2s;
-            width: fit-content;
+            margin-bottom: 2px; transition: 0.2s; width: fit-content;
         }
         .info-link:hover { color: #000; }
         .info-icon { 
@@ -42,7 +39,6 @@
         .btn { padding: 10px; background: #333; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
         .btn:hover { background: #000; }
 
-        /* サイドパネル */
         #side-panel {
             position: absolute; right: -400px; top: 0; width: 350px; height: calc(100% - 100px);
             background: rgba(255, 255, 255, 0.98); box-shadow: -5px 0 15px rgba(0,0,0,0.1);
@@ -52,7 +48,6 @@
         #side-panel.open { right: 0; }
         .panel-close { align-self: flex-end; cursor: pointer; font-size: 24px; font-weight: bold; color: #999; }
         
-        /* 固定プレイヤー（右下） */
         #fixed-player {
             position: absolute; bottom: 15px; right: 15px; width: 350px; min-height: 80px;
             z-index: 300; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);
@@ -60,10 +55,7 @@
         }
         #fixed-player.visible { display: block; animation: slideIn 0.3s ease-out; }
 
-        @keyframes slideIn {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
+        @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
         .play-this-btn { 
             display: block; padding: 15px; background: #1DB954; color: white; 
@@ -84,10 +76,9 @@
 <body>
 
     <div id="ui-layer">
-        <a href="https://note.com/ready_yucca1038/n/n7ee11797c256" target="_blank" class="info-link">
+        <a href="https://your-info-page-url.com" target="_blank" class="info-link">
             <span class="info-icon">?</span> このアプリについて
         </a>
-        
         <div class="search-container">
             <input type="text" id="node-search" placeholder="アーティスト検索..." autocomplete="off">
             <div id="search-results"></div>
@@ -158,6 +149,7 @@
                     container: document.getElementById('cy'),
                     elements: elements,
                     minZoom: 0.001, maxZoom: 0.1,
+                    autoungrabify: true, // ドラッグ禁止を適用
                     style: [
                         { selector: 'node', style: { 'width': 'data(size)', 'height': 'data(size)', 'label': 'data(label)', 'font-size': CONFIG.baseFontSize, 'background-color': 'data(color)', 'text-outline-width': 20, 'text-outline-color': '#fff' }},
                         { selector: 'edge', style: { 'width': CONFIG.edgeWidth, 'line-color': '#ccc', 'opacity': 0.2, 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'target-arrow-color': '#ccc' }},
