@@ -28,24 +28,29 @@
         #side-panel {
             position: absolute; right: -400px; top: 0; width: 350px; height: 100%;
             background: rgba(255, 255, 255, 0.98); box-shadow: -5px 0 15px rgba(0,0,0,0.1);
-            z-index: 200; transition: 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            z-index: 2000; transition: 0.4s cubic-bezier(0.25, 1, 0.5, 1);
             padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 15px; overflow-y: auto;
         }
         #side-panel.open { right: 0; }
         .panel-close { align-self: flex-end; cursor: pointer; font-size: 24px; font-weight: bold; color: #999; }
         
-        /* ツアーコントロール */
-        #tour-control { padding: 12px; background: #f0f7ff; border-radius: 10px; border: 1px solid #cce3ff; }
+        /* ツアーコントロール：重なり順を最前面に */
+        #tour-control { 
+            position: relative; z-index: 3000; 
+            padding: 12px; background: #f0f7ff; border-radius: 10px; border: 1px solid #cce3ff; 
+        }
         .tour-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-        .tour-label { font-weight: bold; font-size: 14px; color: #0056b3; }
+        .tour-label { font-weight: bold; font-size: 14px; color: #0056b3; pointer-events: none; }
+        #tour-switch { width: 24px; height: 24px; cursor: pointer; margin: 0; z-index: 3001; }
+        
         #tour-status { font-size: 12px; color: #666; display: none; margin-top: 8px; }
         .jump-btn { background: #0056b3; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
 
         .lastfm-btn { display: block; padding: 12px; background: #ba0000; color: white; text-decoration: none; border-radius: 8px; text-align: center; font-weight: bold; }
-        #spotify-area { min-height: 152px; border-radius: 12px; background: #f8f8f8; overflow: hidden; border: none; }
+        #spotify-area { min-height: 152px; border-radius: 12px; background: #f8f8f8; overflow: hidden; border: none; z-index: 10; }
 
         @media screen and (max-width: 768px) {
-            #side-panel { right: 0; bottom: -100%; top: auto; width: 100%; height: 60%; border-radius: 20px 20px 0 0; }
+            #side-panel { right: 0; bottom: -100%; top: auto; width: 100%; height: 65%; border-radius: 20px 20px 0 0; }
             #side-panel.open { bottom: 0; }
         }
         #status-log { position: absolute; bottom: 5px; right: 5px; z-index: 100; background: rgba(0,0,0,0.6); color: #0f0; padding: 5px 10px; font-size: 10px; border-radius: 3px; pointer-events: none; }
@@ -68,10 +73,10 @@
         <div id="link-area"></div>
 
         <div id="tour-control">
-            <label class="tour-header">
+            <div class="tour-header" id="tour-label-area">
                 <span class="tour-label">🔄 ツアー再生モード</span>
-                <input type="checkbox" id="tour-switch" style="width: 20px; height: 20px; cursor: pointer;">
-            </label>
+                <input type="checkbox" id="tour-switch">
+            </div>
             <div id="tour-status">
                 移動まで: <span id="timer-count" style="font-weight: bold; color: #333;">60</span>秒
                 <button class="jump-btn" onclick="jumpNextNode()">すぐに次へ</button>
@@ -174,17 +179,26 @@
                     } else { searchResults.style.display = 'none'; }
                 });
 
-                // ツアー再生モードのイベント登録
-                document.getElementById('tour-switch').addEventListener('change', function(e) {
+                // --- 重要：ツアー再生スイッチの確実なイベント登録 ---
+                const ts = document.getElementById('tour-switch');
+                const tHeader = document.getElementById('tour-label-area');
+                
+                const toggleFunction = function(e) {
+                    if (e.target.id !== 'tour-switch') {
+                        ts.checked = !ts.checked;
+                    }
                     const status = document.getElementById('tour-status');
-                    if (e.target.checked) {
+                    if (ts.checked) {
                         status.style.display = 'block';
                         startTour();
                     } else {
                         status.style.display = 'none';
                         stopTour();
                     }
-                });
+                };
+
+                tHeader.onclick = toggleFunction;
+                ts.onclick = function(e) { e.stopPropagation(); }; // 二重発火防止
 
                 adjustView(false);
                 addLog(`描画完了: ${fullData.nodes.length} nodes`);
@@ -217,7 +231,6 @@
                 spotifyArea.innerHTML = `<div style="padding: 20px; color: #666; font-size: 13px; text-align: center;">Spotify ID未登録</div>`;
             }
             sidePanel.classList.add('open');
-            // ツアー中なら時間をリセット
             if(document.getElementById('tour-switch').checked) {
                 timeLeft = DEFAULT_TIME;
                 document.getElementById('timer-count').innerText = timeLeft;
@@ -228,9 +241,8 @@
 
         function resetSelection() { closePanel(); cy.elements().removeClass('faded highlight-node edge-out edge-in'); searchInput.value = ''; adjustView(true); }
 
-        // --- ツアー再生ロジック ---
         function startTour() {
-            stopTour();
+            clearInterval(tourInterval);
             timeLeft = DEFAULT_TIME;
             document.getElementById('timer-count').innerText = timeLeft;
             tourInterval = setInterval(() => {
@@ -253,7 +265,7 @@
             const current = cy.nodes('.highlight-node');
             if (current.length === 0) return;
             const neighbors = current.neighborhood().nodes();
-            let next = neighbors.length > 0 ? neighbors[Math.floor(Math.random() * neighbors.length)] : cy.nodes().not(current).randomElement();
+            let next = (neighbors.length > 0) ? neighbors[Math.floor(Math.random() * neighbors.length)] : cy.nodes().not(current).randomElement();
             if (next) {
                 selectNode(next);
                 openPanel(next.data());
