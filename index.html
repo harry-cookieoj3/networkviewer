@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Idol Network Viewer - Auto Tour Edition</title>
+    <title>Live Idol Network Viewer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #333; }
@@ -36,14 +36,13 @@
         
         /* ツアーコントロール */
         #tour-control { padding: 12px; background: #f0f7ff; border-radius: 10px; border: 1px solid #cce3ff; }
-        .tour-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .tour-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
         .tour-label { font-weight: bold; font-size: 14px; color: #0056b3; }
         #tour-status { font-size: 12px; color: #666; display: none; margin-top: 8px; }
         .jump-btn { background: #0056b3; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
 
-        .lastfm-btn { display: block; padding: 12px; background: #ba0000; color: white; text-decoration: none; border-radius: 8px; text-align: center; font-weight: bold; transition: opacity 0.2s; }
-        .lastfm-btn:hover { opacity: 0.8; }
-        #spotify-area { min-height: 152px; border-radius: 12px; background: #f8f8f8; overflow: hidden; }
+        .lastfm-btn { display: block; padding: 12px; background: #ba0000; color: white; text-decoration: none; border-radius: 8px; text-align: center; font-weight: bold; }
+        #spotify-area { min-height: 152px; border-radius: 12px; background: #f8f8f8; overflow: hidden; border: none; }
 
         @media screen and (max-width: 768px) {
             #side-panel { right: 0; bottom: -100%; top: auto; width: 100%; height: 60%; border-radius: 20px 20px 0 0; }
@@ -62,26 +61,25 @@
         <button class="btn" onclick="resetSelection()">全体を表示 / 解除</button>
     </div>
 
+    <div id="side-panel">
+        <span class="panel-close" onclick="closePanel()">×</span>
+        <h2 id="panel-title" style="margin: 0;">Artist Name</h2>
+        
+        <div id="link-area"></div>
 
-        <div id="side-panel">
-            <span class="panel-close" onclick="closePanel()">×</span>
-            <h2 id="panel-title" style="margin: 0;">Artist Name</h2>
-            
-            <div id="link-area"></div>
-        
-            <div id="tour-control">
-                <label class="tour-header" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
-                    <span class="tour-label">🔄 ツアー再生モード</span>
-                    <input type="checkbox" id="tour-switch" style="width: 20px; height: 20px; cursor: pointer;">
-                </label>
-                <div id="tour-status">
-                    移動まで: <span id="timer-count" style="font-weight: bold; color: #333;">60</span>秒
-                    <button class="jump-btn" onclick="jumpNextNode()">すぐに次へ</button>
-                </div>
+        <div id="tour-control">
+            <label class="tour-header">
+                <span class="tour-label">🔄 ツアー再生モード</span>
+                <input type="checkbox" id="tour-switch" style="width: 20px; height: 20px; cursor: pointer;">
+            </label>
+            <div id="tour-status">
+                移動まで: <span id="timer-count" style="font-weight: bold; color: #333;">60</span>秒
+                <button class="jump-btn" onclick="jumpNextNode()">すぐに次へ</button>
             </div>
-        
-            <div id="spotify-area"></div>
         </div>
+
+        <div id="spotify-area"></div>
+    </div>
 
     <div id="status-log">Initializing...</div>
     <div id="cy"></div>
@@ -96,7 +94,6 @@
         const searchInput = document.getElementById('node-search');
         const searchResults = document.getElementById('search-results');
         const sidePanel = document.getElementById('side-panel');
-        const timerCountEl = document.getElementById('timer-count');
 
         const CONFIG = {
             gasUrl: "https://script.google.com/macros/s/AKfycbxLSa95r08HRbuQhEWUgVSUSeSaUmJxpA8fRZ4NVAbiGLhVA3kFkEdbEVIvlr2HWcAn/exec", 
@@ -152,6 +149,7 @@
 
                 cy.on('tap', 'node', function(e){ selectNode(e.target); openPanel(e.target.data()); });
 
+                // 検索
                 searchInput.addEventListener('input', (e) => {
                     const val = e.target.value.toLowerCase();
                     searchResults.innerHTML = '';
@@ -174,6 +172,18 @@
                             searchResults.appendChild(div);
                         });
                     } else { searchResults.style.display = 'none'; }
+                });
+
+                // ツアー再生モードのイベント登録
+                document.getElementById('tour-switch').addEventListener('change', function(e) {
+                    const status = document.getElementById('tour-status');
+                    if (e.target.checked) {
+                        status.style.display = 'block';
+                        startTour();
+                    } else {
+                        status.style.display = 'none';
+                        stopTour();
+                    }
                 });
 
                 adjustView(false);
@@ -202,66 +212,52 @@
             
             if (data.spotify_id && data.spotify_id.length > 10 && !data.spotify_id.includes('-')) {
                 const cleanId = String(data.spotify_id).replace('spotify:artist:', '').trim();
-                spotifyArea.innerHTML = `<iframe src="https://open.spotify.com/embed/artist/${cleanId}?utm_source=generator" width="100%" height="152" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>`;
+                spotifyArea.innerHTML = `<iframe src="https://open.spotify.com/embed/artist/${cleanId}?utm_source=generator" width="100%" height="152" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy" style="border:none;"></iframe>`;
             } else {
                 spotifyArea.innerHTML = `<div style="padding: 20px; color: #666; font-size: 13px; text-align: center;">Spotify ID未登録</div>`;
             }
             sidePanel.classList.add('open');
-            if(document.getElementById('tour-switch').checked) timeLeft = DEFAULT_TIME;
+            // ツアー中なら時間をリセット
+            if(document.getElementById('tour-switch').checked) {
+                timeLeft = DEFAULT_TIME;
+                document.getElementById('timer-count').innerText = timeLeft;
+            }
         }
 
         function closePanel() { sidePanel.classList.remove('open'); stopTour(); }
 
         function resetSelection() { closePanel(); cy.elements().removeClass('faded highlight-node edge-out edge-in'); searchInput.value = ''; adjustView(true); }
 
-        // --- 巡回ロジック ---
-        document.getElementById('tour-switch').addEventListener('change', function(e) {
-            const status = document.getElementById('tour-status');
-            if (e.target.checked) {
-                status.style.display = 'block';
-                startTour();
-            } else {
-                status.style.display = 'none';
-                stopTour();
-            }
-        });
-
+        // --- ツアー再生ロジック ---
         function startTour() {
             stopTour();
             timeLeft = DEFAULT_TIME;
+            document.getElementById('timer-count').innerText = timeLeft;
             tourInterval = setInterval(() => {
                 timeLeft--;
-                timerCountEl.innerText = timeLeft;
+                document.getElementById('timer-count').innerText = timeLeft;
                 if (timeLeft <= 0) jumpNextNode();
             }, 1000);
         }
 
         function stopTour() {
             clearInterval(tourInterval);
-            document.getElementById('tour-switch').checked = false;
-            document.getElementById('tour-status').style.display = 'none';
+            const ts = document.getElementById('tour-switch');
+            if(ts) ts.checked = false;
+            const tstatus = document.getElementById('tour-status');
+            if(tstatus) tstatus.style.display = 'none';
         }
 
         function jumpNextNode() {
             if (!cy) return;
             const current = cy.nodes('.highlight-node');
             if (current.length === 0) return;
-
-            // 接続先(neighbors)を取得
             const neighbors = current.neighborhood().nodes();
-            let next;
-            if (neighbors.length > 0) {
-                next = neighbors[Math.floor(Math.random() * neighbors.length)];
-            } else {
-                // 行き止まりなら全体からランダム
-                next = cy.nodes().not(current).randomElement();
-            }
-
+            let next = neighbors.length > 0 ? neighbors[Math.floor(Math.random() * neighbors.length)] : cy.nodes().not(current).randomElement();
             if (next) {
                 selectNode(next);
                 openPanel(next.data());
                 cy.animate({ center: { eles: next }, zoom: 0.02 }, { duration: 1500 });
-                timeLeft = DEFAULT_TIME;
             }
         }
 
