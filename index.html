@@ -3,38 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Idol Network Viewer - Optimized</title>
+    <title>Live Idol Network Viewer - Music Integration</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #fff; }
+        body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #333; }
         #cy { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
         
-        /* レスポンシブなUI設計 */
+        /* UIレイヤー */
         #ui-layer {
             position: absolute; top: 15px; left: 15px; z-index: 100;
-            display: flex; flex-direction: column; gap: 8px;
-            width: 280px; max-width: calc(100% - 30px);
+            display: flex; flex-direction: column; gap: 8px; width: 280px;
         }
         .search-container { position: relative; }
         #node-search {
-            width: 100%; padding: 10px; border: 2px solid #333;
-            border-radius: 8px; font-size: 16px; box-sizing: border-box;
+            width: 100%; padding: 12px; border: 2px solid #333; border-radius: 8px; font-size: 16px; box-sizing: border-box; outline: none;
         }
         #search-results {
-            position: absolute; top: 100%; left: 0; width: 100%;
-            background: #fff; border: 1px solid #ccc; max-height: 200px;
-            overflow-y: auto; display: none; z-index: 101;
+            position: absolute; top: 100%; left: 0; width: 100%; background: #fff; border: 1px solid #ccc; max-height: 200px; overflow-y: auto; display: none; z-index: 101;
         }
         .search-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; }
-        .btn {
-            padding: 10px; background: #333; color: #fff; border: none;
-            border-radius: 8px; cursor: pointer; font-weight: bold;
+        .btn { padding: 10px; background: #333; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+
+        /* 情報サイドパネル */
+        #side-panel {
+            position: absolute; right: -400px; top: 0; width: 350px; height: 100%;
+            background: rgba(255, 255, 255, 0.95); box-shadow: -5px 0 15px rgba(0,0,0,0.1);
+            z-index: 200; transition: 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 15px;
+            overflow-y: auto;
         }
-        #status-log {
-            position: absolute; bottom: 5px; right: 5px; z-index: 100;
-            background: rgba(0,0,0,0.6); color: #0f0; padding: 5px 10px;
-            font-size: 10px; border-radius: 3px; pointer-events: none;
+        #side-panel.open { right: 0; }
+        .panel-close { align-self: flex-end; cursor: pointer; font-size: 24px; font-weight: bold; }
+        #spotify-area { min-height: 152px; background: #eee; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+        .lastfm-btn { display: inline-block; padding: 10px; background: #ba0000; color: white; text-decoration: none; border-radius: 6px; text-align: center; font-weight: bold; }
+
+        /* スマホ向け調整 */
+        @media screen and (max-width: 768px) {
+            #side-panel { right: 0; bottom: -100%; top: auto; width: 100%; height: 50%; box-shadow: 0 -5px 15px rgba(0,0,0,0.1); border-radius: 20px 20px 0 0; }
+            #side-panel.open { bottom: 0; }
         }
+
+        #status-log { position: absolute; bottom: 5px; right: 5px; z-index: 100; background: rgba(0,0,0,0.6); color: #0f0; padding: 5px 10px; font-size: 10px; border-radius: 3px; pointer-events: none; }
     </style>
 </head>
 <body>
@@ -44,7 +53,16 @@
             <input type="text" id="node-search" placeholder="アーティスト検索..." autocomplete="off">
             <div id="search-results"></div>
         </div>
-        <button class="btn" onclick="resetSelection()">全体を表示 / 解除</button>
+        <button class="btn" onclick="resetSelection()">全体を表示 / 閉じる</button>
+    </div>
+
+    <div id="side-panel">
+        <span class="panel-close" onclick="closePanel()">×</span>
+        <h2 id="panel-title" style="margin: 0;">Artist Name</h2>
+        <div id="spotify-area">
+            </div>
+        <div id="link-area">
+            </div>
     </div>
 
     <div id="status-log">Initializing...</div>
@@ -55,24 +73,20 @@
         const logEl = document.getElementById('status-log');
         const searchInput = document.getElementById('node-search');
         const searchResults = document.getElementById('search-results');
+        const sidePanel = document.getElementById('side-panel');
 
         function addLog(msg) { logEl.innerText = msg; }
 
         const CONFIG = {
             gasUrl: "https://script.google.com/macros/s/AKfycbxLSa95r08HRbuQhEWUgVSUSeSaUmJxpA8fRZ4NVAbiGLhVA3kFkEdbEVIvlr2HWcAn/exec", 
             token: "my-secret-token-2026",
-            baseNodeSize: 225, 
-            baseFontSize: 1500,
-            edgeWidth: 35
+            baseNodeSize: 225, baseFontSize: 1500, edgeWidth: 35
         };
 
-        // 画面調整関数（軽量版）
         function adjustView(animate = true) {
             if (!cy) return;
             const isMobile = window.innerWidth < 768;
-            cy.animate({
-                fit: { eles: cy.elements(), padding: isMobile ? 30 : 60 }
-            }, { duration: animate ? 600 : 0 });
+            cy.animate({ fit: { eles: cy.elements(), padding: isMobile ? 30 : 60 } }, { duration: animate ? 600 : 0 });
         }
 
         async function start() {
@@ -82,20 +96,24 @@
                 const fullData = await response.json();
 
                 const elements = [];
-                // Node作成 (Y軸反転修正済)
                 fullData.nodes.forEach(n => {
                     elements.push({
                         group: 'nodes',
-                        data: { id: String(n.id), label: n.label, color: n.color, size: parseFloat(n.size) * CONFIG.baseNodeSize },
+                        data: { 
+                            id: String(n.id), 
+                            label: n.label, 
+                            color: n.color, 
+                            size: parseFloat(n.size) * CONFIG.baseNodeSize,
+                            spotify_id: n.spotify_id, // 新しい列
+                            url_lastfm: n.url_lastfm  // 新しい列
+                        },
                         position: { x: parseFloat(n.x), y: -parseFloat(n.y) }
                     });
                 });
 
-                // Edge作成 (自己ループ回避ガード付)
                 const nodeIds = new Set(fullData.nodes.map(n => String(n.id)));
                 fullData.edges.forEach(e => {
-                    const s = String(e.source);
-                    const t = String(e.target);
+                    const s = String(e.source); const t = String(e.target);
                     if (s !== t && nodeIds.has(s) && nodeIds.has(t)) {
                         elements.push({ group: 'edges', data: { source: s, target: t } });
                     }
@@ -104,17 +122,10 @@
                 cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
+                    minZoom: 0.001, maxZoom: 0.1,
                     style: [
-                        { selector: 'node', style: {
-                            'width': 'data(size)', 'height': 'data(size)',
-                            'label': 'data(label)', 'font-size': CONFIG.baseFontSize,
-                            'background-color': 'data(color)',
-                            'text-outline-width': 20, 'text-outline-color': '#fff'
-                        }},
-                        { selector: 'edge', style: { 
-                            'width': CONFIG.edgeWidth, 'line-color': '#ccc', 'opacity': 0.2,
-                            'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'target-arrow-color': '#ccc'
-                        }},
+                        { selector: 'node', style: { 'width': 'data(size)', 'height': 'data(size)', 'label': 'data(label)', 'font-size': CONFIG.baseFontSize, 'background-color': 'data(color)', 'text-outline-width': 20, 'text-outline-color': '#fff' }},
+                        { selector: 'edge', style: { 'width': CONFIG.edgeWidth, 'line-color': '#ccc', 'opacity': 0.2, 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'target-arrow-color': '#ccc' }},
                         { selector: '.faded', style: { 'opacity': 0.05, 'text-opacity': 0 }},
                         { selector: '.highlight-node', style: { 'z-index': 999, 'border-width': 60, 'border-color': '#000' }},
                         { selector: '.edge-out', style: { 'line-color': 'red', 'target-arrow-color': 'red', 'opacity': 1 }},
@@ -123,44 +134,39 @@
                     layout: { name: 'preset' }
                 });
 
-                cy.on('tap', 'node', function(e){ selectNode(e.target); });
+                cy.on('tap', 'node', function(e){ 
+                    selectNode(e.target); 
+                    openPanel(e.target.data());
+                });
 
-                // 検索ロジック (エラー保護付)
                 searchInput.addEventListener('input', (e) => {
                     const val = e.target.value.toLowerCase();
                     searchResults.innerHTML = '';
                     if (!val) { searchResults.style.display = 'none'; return; }
-
                     const matches = cy.nodes().filter(n => {
                         const lbl = n.data('label');
                         return lbl && typeof lbl === 'string' && lbl.toLowerCase().includes(val);
                     });
-
                     if (matches.length > 0) {
                         searchResults.style.display = 'block';
                         matches.slice(0, 10).forEach(m => {
                             const div = document.createElement('div');
-                            div.className = 'search-item';
-                            div.innerText = m.data('label');
+                            div.className = 'search-item'; div.innerText = m.data('label');
                             div.onmousedown = (ev) => {
                                 ev.preventDefault();
                                 selectNode(m);
+                                openPanel(m.data());
                                 cy.animate({ center: { eles: m }, zoom: 0.02 }, { duration: 1000 });
-                                searchResults.style.display = 'none';
-                                searchInput.value = m.data('label');
+                                searchResults.style.display = 'none'; searchInput.value = m.data('label');
                             };
                             searchResults.appendChild(div);
                         });
                     } else { searchResults.style.display = 'none'; }
                 });
 
-                // 初期表示を実行
                 adjustView(false);
                 addLog(`描画完了: ${fullData.nodes.length} nodes`);
-
-            } catch (err) {
-                addLog("Error: " + err.message);
-            }
+            } catch (err) { addLog("Error: " + err.message); }
         }
 
         function selectNode(node) {
@@ -175,13 +181,35 @@
             node.neighborhood().nodes().removeClass('faded');
         }
 
+        function openPanel(data) {
+            document.getElementById('panel-title').innerText = data.label;
+            const spotifyArea = document.getElementById('spotify-area');
+            const linkArea = document.getElementById('link-area');
+            
+            // Spotify埋め込み
+            if (data.spotify_id) {
+                spotifyArea.innerHTML = `<iframe src="https://open.spotify.com/embed/artist/${data.spotify_id}" width="100%" height="152" frameborder="0" allowtransparency="true" allow="encrypted-media"></iframe>`;
+            } else {
+                spotifyArea.innerHTML = `<p style="padding: 20px; color: #666;">Spotify IDが未登録です</p>`;
+            }
+
+            // 外部リンク
+            linkArea.innerHTML = data.url_lastfm ? `<a href="${data.url_lastfm}" target="_blank" class="lastfm-btn">Last.fm で詳しく見る</a>` : '';
+            
+            sidePanel.classList.add('open');
+        }
+
+        function closePanel() {
+            sidePanel.classList.remove('open');
+        }
+
         function resetSelection() {
+            closePanel();
             cy.elements().removeClass('faded highlight-node edge-out edge-in');
             searchInput.value = '';
             adjustView(true);
         }
 
-        // リサイズ監視
         let resizeTimer;
         window.addEventListener('resize', () => {
             clearTimeout(resizeTimer);
