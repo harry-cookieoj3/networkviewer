@@ -186,15 +186,26 @@
             const spotifyArea = document.getElementById('spotify-area');
             const linkArea = document.getElementById('link-area');
             
-            // Spotify埋め込み
-            if (data.spotify_id) {
-                spotifyArea.innerHTML = `<iframe src="https://open.spotify.com/embed/artist/${data.spotify_id}" width="100%" height="152" frameborder="0" allowtransparency="true" allow="encrypted-media"></iframe>`;
-            } else {
-                spotifyArea.innerHTML = `<p style="padding: 20px; color: #666;">Spotify IDが未登録です</p>`;
-            }
-
-            // 外部リンク
+            // 1. 先に外部リンク（Last.fm）を表示
             linkArea.innerHTML = data.url_lastfm ? `<a href="${data.url_lastfm}" target="_blank" class="lastfm-btn">Last.fm で詳しく見る</a>` : '';
+        
+            // 2. 次にSpotify埋め込みを表示（URLを修正）
+            if (data.spotify_id) {
+                // IDが「spotify:artist:xxx」形式でも「xxx」形式でも対応できるように整形
+                const cleanId = data.spotify_id.replace('spotify:artist:', '');
+                spotifyArea.innerHTML = `
+                    <iframe 
+                        src="https://open.spotify.com/embed/artist/${cleanId}?utm_source=generator" 
+                        width="100%" 
+                        height="152" 
+                        frameborder="0" 
+                        allowfullscreen="" 
+                        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+                        loading="lazy">
+                    </iframe>`;
+            } else {
+                spotifyArea.innerHTML = `<p style="padding: 20px; color: #666; font-size: 14px;">Spotify IDが未登録です</p>`;
+            }
             
             sidePanel.classList.add('open');
         }
