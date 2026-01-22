@@ -240,24 +240,47 @@
         function closePanel() { sidePanel.classList.remove('open'); stopTour(); }
 
         function resetSelection() { closePanel(); cy.elements().removeClass('faded highlight-node edge-out edge-in'); searchInput.value = ''; adjustView(true); }
-
+        // --- 修正版：ツアー再生ロジック (これを丸ごと差し替え) ---
+        
         function startTour() {
+            console.log("ツアーを開始します..."); // 動作確認用
             clearInterval(tourInterval);
             timeLeft = DEFAULT_TIME;
-            document.getElementById('timer-count').innerText = timeLeft;
+            
+            const countEl = document.getElementById('timer-count');
+            if (countEl) countEl.innerText = timeLeft;
+        
             tourInterval = setInterval(() => {
                 timeLeft--;
-                document.getElementById('timer-count').innerText = timeLeft;
-                if (timeLeft <= 0) jumpNextNode();
+                if (countEl) countEl.innerText = timeLeft;
+                
+                if (timeLeft <= 0) {
+                    console.log("時間切れ！次のノードへジャンプします");
+                    jumpNextNode();
+                }
             }, 1000);
         }
-
+        
         function stopTour() {
+            console.log("ツアーを停止しました");
             clearInterval(tourInterval);
-            const ts = document.getElementById('tour-switch');
-            if(ts) ts.checked = false;
-            const tstatus = document.getElementById('tour-status');
-            if(tstatus) tstatus.style.display = 'none';
+        }
+        
+        // start関数内にある「ツアー再生スイッチのイベント登録」を以下に差し替え
+        // (既存の toggleFunction や tHeader.onclick は消してこれ1つにしてください)
+        const ts = document.getElementById('tour-switch');
+        const tStatus = document.getElementById('tour-status');
+        
+        if (ts) {
+            ts.onchange = function() {
+                if (this.checked) {
+                    tStatus.style.display = 'block';
+                    startTour();
+                } else {
+                    tStatus.style.display = 'none';
+                    stopTour();
+                }
+            };
         }
 
         function jumpNextNode() {
