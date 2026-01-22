@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Live Idol Network Viewer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; font-family: monospace; background: #fff; } 
         #log-panel { 
@@ -28,13 +29,15 @@
             logPanel.scrollTop = logPanel.scrollHeight;
         }
 
-        // --- 設定エリア (ここを書き換えてください) ---
+        const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
+        
         const CONFIG = {
             gasUrl: "https://script.google.com/macros/s/AKfycbxLSa95r08HRbuQhEWUgVSUSeSaUmJxpA8fRZ4NVAbiGLhVA3kFkEdbEVIvlr2HWcAn/exec", 
             token: "my-secret-token-2026", // GASで設定したトークン
             baseNodeSize: 225, 
-            baseFontSize: 1500,
+            baseFontSize: 1000,
             edgeWidth: 25,
+            defaultColor: '#1a73e8',
             centerX: 9370,   
             centerY: 9140,   
             initialZoom: 0.005
@@ -42,32 +45,41 @@
 
         async function start() {
             try {
-                addLog("GASからデータを取得中...");
+                addLog("1階層強調・ドラッグ禁止版をロード中...");
+                const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
+                const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
+
+                const [resN, resE] = await Promise.all([fetch(nodeUrl), fetch(edgeUrl)]);
+                const [txtN, txtE] = await Promise.all([resN.text(), resE.text()]);
                 
-                // GASからデータを取得
-                const response = await fetch(`${CONFIG.gasUrl}?token=${CONFIG.token}`);
-                if (!response.ok) throw new Error("通信エラーが発生しました");
-                const fullData = await response.json();
+                const nodesData = Papa.parse(txtN, {header:true, skipEmptyLines:true}).data;
+                const edgesData = Papa.parse(txtE, {header:true, skipEmptyLines:true}).data;
 
-                addLog(`データ受信完了 (Nodes: ${fullData.nodes.length}件)`);
-
-                // Cytoscape用のデータ形式に変換
                 const elements = [];
-                
-                fullData.nodes.forEach(n => {
-                    const id = String(n.id);
-                    const nSize = parseFloat(n.size || 10) * CONFIG.baseNodeSize;
+                const nodeIds = new Set();
+
+                nodesData.forEach(n => {
+                    const id = (n.id || n.Id || "").trim();
+                    if(!id) return;
+                    
+                    const valSize = parseFloat(n.size || n.Size || 10);
+                    const nSize = valSize * CONFIG.baseNodeSize;
+                    const nColor = n.color || n.Color || CONFIG.defaultColor;
+
                     elements.push({
                         group: 'nodes',
-                        data: { id, label: n.label || id, color: n.color || '#1a73e8', size: nSize },
+                        data: { id, label: n.label || id, color: nColor, size: nSize, raw: n },
                         position: { x: parseFloat(n.x || 0), y: -parseFloat(n.y || 0) }
                     });
+                    nodeIds.add(id);
                 });
 
-                fullData.edges.forEach(e => {
-                    const s = String(e.source);
-                    const t = String(e.target);
-                    elements.push({ group: 'edges', data: { source: s, target: t } });
+                edgesData.forEach(e => {
+                    const s = (e.source || "").trim();
+                    const t = (e.target || "").trim();
+                    if(nodeIds.has(s) && nodeIds.has(t)) {
+                        elements.push({ group: 'edges', data: { source: s, target: t } });
+                    }
                 });
 
                 const cy = cytoscape({
@@ -79,14 +91,24 @@
                             'label': 'data(label)', 'font-size': CONFIG.baseFontSize,
                             'background-color': 'data(color)',
                             'text-outline-width': 20, 'text-outline-color': '#fff',
-                            'color': '#000', 'font-weight': 'bold'
+                            'color': '#000', 'font-weight': 'bold',
+                            'transition-property': 'opacity, font-size, text-outline-width',
+                            'transition-duration': '0.3s'
                         }},
                         { selector: 'edge', style: { 
-                            'width': CONFIG.edgeWidth, 'line-color': '#999', 'opacity': 0.3, 'curve-style': 'haystack'
+                            'width': CONFIG.edgeWidth, 
+                            'line-color': '#999', 
+                            'opacity': 0.3,
+                            'curve-style': 'haystack',
+                            'transition-property': 'opacity, width, line-color',
+                            'transition-duration': '0.3s'
                         }},
                         { selector: '.faded', style: { 'opacity': 0.03, 'text-opacity': 0 }},
                         { selector: '.highlight', style: {
-                            'opacity': 1, 'font-size': CONFIG.baseFontSize * 1.8, 'text-outline-width': 40, 'z-index': 999
+                            'opacity': 1,
+                            'font-size': CONFIG.baseFontSize * 1.8,
+                            'text-outline-width': 40,
+                            'z-index': 999
                         }},
                         { selector: '.edge-highlight', style: {
                             'opacity': 1, 'width': CONFIG.edgeWidth * 2.5, 'line-color': '#222', 'z-index': 998
@@ -104,26 +126,30 @@
                     }
                 });
 
+                // --- 1階層フォーカス機能 (戻しました) ---
                 cy.on('tap', 'node', function(e){
                     const node = e.target;
+                    // 直接の隣人（1階層）と自分自身のみを取得
                     const neighborhood = node.neighborhood().add(node);
+
+                    addLog(`フォーカス(1階層): ${node.data('label')}`, "#0ff");
+
                     cy.elements().addClass('faded').removeClass('highlight edge-highlight');
                     neighborhood.removeClass('faded').addClass('highlight');
                     node.connectedEdges().removeClass('faded').addClass('edge-highlight');
-                    addLog(`選択: ${node.data('label')}`);
                 });
 
                 cy.on('tap', function(e){
                     if( e.target === cy ){
+                        addLog("フォーカス解除", "#aaa");
                         cy.elements().removeClass('faded highlight edge-highlight');
                     }
                 });
 
-                addLog("システム正常稼働中");
+                addLog("準備完了。ノードは固定、クリックで直接の接続先を強調します。");
 
             } catch (err) {
                 addLog("エラー: " + err.message, "#f00");
-                console.error(err);
             }
         }
         start();
