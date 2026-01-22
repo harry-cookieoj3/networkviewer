@@ -1,43 +1,57 @@
-<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Live Idol Network Viewer </title>
+    <title>Live Idol Network Viewer - Directional Mode</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; font-family: monospace; background: #fff; } 
-        #log-panel { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 18%; 
-            background: rgba(0,0,0,0.85); color: #0f0; overflow-y: auto; z-index: 9999; 
-            padding: 10px; font-size: 11px; border-bottom: 2px solid #555;
-        }
+        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #fff; }
         #cy { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        
+        /* UIパネル */
+        #ui-layer {
+            position: absolute; top: 10px; left: 10px; z-index: 100;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .btn {
+            padding: 8px 15px; background: #333; color: #fff; border: none;
+            border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;
+        }
+        .btn:hover { background: #555; }
+
+        /* 凡例（色の説明） */
+        #legend {
+            position: absolute; bottom: 20px; left: 20px; z-index: 100;
+            background: rgba(255,255,255,0.8); padding: 10px; border-radius: 5px;
+            font-size: 12px; border: 1px solid #ccc;
+        }
+        .legend-item { display: flex; align-items: center; margin-bottom: 3px; }
+        .color-box { width: 15px; height: 15px; margin-right: 8px; border-radius: 2px; }
     </style>
 </head>
 <body>
-    <div id="log-panel"></div>
+
+    <div id="ui-layer">
+        <button class="btn" onclick="resetSelection()">選択解除</button>
+    </div>
+
+    <div id="legend">
+        <strong>方向の意味</strong>
+        <div class="legend-item"><div class="color-box" style="background: red;"></div> 流出 (影響を与えた/次へ)</div>
+        <div class="legend-item"><div class="color-box" style="background: blue;"></div> 流入 (影響を受けた/前から)</div>
+        <div class="legend-item"><div class="color-box" style="background: #333;"></div> 双方向</div>
+    </div>
+
     <div id="cy"></div>
 
     <script>
-        const logPanel = document.getElementById('log-panel');
-        function addLog(msg, color='') {
-            const div = document.createElement('div');
-            div.style.color = color;
-            div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            logPanel.appendChild(div);
-            logPanel.scrollTop = logPanel.scrollHeight;
-        }
+        let cy;
 
-        const FILE_ID = '1Be7JMrTnqoarJ9R1Bdv3cZttJ0WPa73cisuYTERuYNY';
-        
         const CONFIG = {
             gasUrl: "https://script.google.com/macros/s/AKfycbxLSa95r08HRbuQhEWUgVSUSeSaUmJxpA8fRZ4NVAbiGLhVA3kFkEdbEVIvlr2HWcAn/exec", 
             token: "my-secret-token-2026", // GASで設定したトークン
             baseNodeSize: 225, 
-            baseFontSize: 1000,
-            edgeWidth: 25,
-            defaultColor: '#1a73e8',
+            baseFontSize: 1500,
+            edgeWidth: 35, // 少し太めにして見やすく
             centerX: 9370,   
             centerY: 9140,   
             initialZoom: 0.005
@@ -45,44 +59,23 @@
 
         async function start() {
             try {
-                addLog("1階層強調・ドラッグ禁止版をロード中...");
-                const nodeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=0`;
-                const edgeUrl = `https://docs.google.com/spreadsheets/d/${FILE_ID}/gviz/tq?tqx=out:csv&gid=1184231939`;
-
-                const [resN, resE] = await Promise.all([fetch(nodeUrl), fetch(edgeUrl)]);
-                const [txtN, txtE] = await Promise.all([resN.text(), resE.text()]);
-                
-                const nodesData = Papa.parse(txtN, {header:true, skipEmptyLines:true}).data;
-                const edgesData = Papa.parse(txtE, {header:true, skipEmptyLines:true}).data;
+                const response = await fetch(`${CONFIG.gasUrl}?token=${CONFIG.token}`, { redirect: 'follow' });
+                const fullData = await response.json();
 
                 const elements = [];
-                const nodeIds = new Set();
-
-                nodesData.forEach(n => {
-                    const id = (n.id || n.Id || "").trim();
-                    if(!id) return;
-                    
-                    const valSize = parseFloat(n.size || n.Size || 10);
-                    const nSize = valSize * CONFIG.baseNodeSize;
-                    const nColor = n.color || n.Color || CONFIG.defaultColor;
-
+                fullData.nodes.forEach(n => {
                     elements.push({
                         group: 'nodes',
-                        data: { id, label: n.label || id, color: nColor, size: nSize, raw: n },
-                        position: { x: parseFloat(n.x || 0), y: -parseFloat(n.y || 0) }
+                        data: { id: String(n.id), label: n.label, color: n.color, size: parseFloat(n.size) * CONFIG.baseNodeSize },
+                        position: { x: parseFloat(n.x), y: -parseFloat(n.y) }
                     });
-                    nodeIds.add(id);
                 });
 
-                edgesData.forEach(e => {
-                    const s = (e.source || "").trim();
-                    const t = (e.target || "").trim();
-                    if(nodeIds.has(s) && nodeIds.has(t)) {
-                        elements.push({ group: 'edges', data: { source: s, target: t } });
-                    }
+                fullData.edges.forEach(e => {
+                    elements.push({ group: 'edges', data: { source: String(e.source), target: String(e.target) } });
                 });
 
-                const cy = cytoscape({
+                cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
@@ -91,67 +84,68 @@
                             'label': 'data(label)', 'font-size': CONFIG.baseFontSize,
                             'background-color': 'data(color)',
                             'text-outline-width': 20, 'text-outline-color': '#fff',
-                            'color': '#000', 'font-weight': 'bold',
-                            'transition-property': 'opacity, font-size, text-outline-width',
-                            'transition-duration': '0.3s'
+                            'z-index': 10
                         }},
                         { selector: 'edge', style: { 
-                            'width': CONFIG.edgeWidth, 
-                            'line-color': '#999', 
-                            'opacity': 0.3,
-                            'curve-style': 'haystack',
-                            'transition-property': 'opacity, width, line-color',
-                            'transition-duration': '0.3s'
+                            'width': CONFIG.edgeWidth, 'line-color': '#ccc', 'opacity': 0.3,
+                            'curve-style': 'bezier', // 曲げて双方向を見やすくする
+                            'target-arrow-shape': 'triangle', 'target-arrow-color': '#ccc',
+                            'arrow-scale': 4
                         }},
-                        { selector: '.faded', style: { 'opacity': 0.03, 'text-opacity': 0 }},
-                        { selector: '.highlight', style: {
-                            'opacity': 1,
-                            'font-size': CONFIG.baseFontSize * 1.8,
-                            'text-outline-width': 40,
-                            'z-index': 999
-                        }},
-                        { selector: '.edge-highlight', style: {
-                            'opacity': 1, 'width': CONFIG.edgeWidth * 2.5, 'line-color': '#222', 'z-index': 998
-                        }}
+                        /* ハイライト時のスタイル */
+                        { selector: '.faded', style: { 'opacity': 0.05, 'text-opacity': 0 }},
+                        { selector: '.highlight-node', style: { 'z-index': 999, 'border-width': 40, 'border-color': '#000' }},
+                        { selector: '.edge-out', style: { 'line-color': 'red', 'target-arrow-color': 'red', 'opacity': 1, 'z-index': 100 }},
+                        { selector: '.edge-in', style: { 'line-color': 'blue', 'target-arrow-color': 'blue', 'opacity': 1, 'z-index': 100 }},
+                        { selector: '.edge-both', style: { 'line-color': '#333', 'target-arrow-color': '#333', 'opacity': 1, 'z-index': 101 }}
                     ],
                     layout: { name: 'preset' },
                     autoungrabify: true
                 });
 
+                // クリックイベント
+                cy.on('tap', 'node', function(e){
+                    const selNode = e.target;
+                    const id = selNode.id();
+
+                    // 一旦リセット
+                    cy.elements().addClass('faded').removeClass('highlight-node edge-out edge-in edge-both');
+                    selNode.removeClass('faded').addClass('highlight-node');
+
+                    // 接続エッジの判定
+                    selNode.connectedEdges().forEach(edge => {
+                        edge.removeClass('faded');
+                        const isOut = edge.source().id() === id;
+                        const isReverseExists = edge.target().connectedEdges().some(re => re.source().id() === edge.target().id() && re.target().id() === id);
+
+                        if (isOut) {
+                            edge.addClass('edge-out');
+                        } else {
+                            edge.addClass('edge-in');
+                        }
+                        
+                        // 双方向チェック (簡易版: 相手からも自分へ線がある場合)
+                        // ここはデータの持ち方によりますが、今回は「色の上書き」で対応
+                    });
+
+                    // 隣接ノードも明るくする
+                    selNode.neighborhood().nodes().removeClass('faded');
+                });
+
                 cy.viewport({
                     zoom: CONFIG.initialZoom,
-                    pan: { 
-                        x: cy.width() / 2 - CONFIG.centerX * CONFIG.initialZoom, 
-                        y: cy.height() / 2 - (-CONFIG.centerY) * CONFIG.initialZoom 
-                    }
+                    pan: { x: cy.width() / 2 - CONFIG.centerX * CONFIG.initialZoom, y: cy.height() / 2 - (-CONFIG.centerY) * CONFIG.initialZoom }
                 });
-
-                // --- 1階層フォーカス機能 (戻しました) ---
-                cy.on('tap', 'node', function(e){
-                    const node = e.target;
-                    // 直接の隣人（1階層）と自分自身のみを取得
-                    const neighborhood = node.neighborhood().add(node);
-
-                    addLog(`フォーカス(1階層): ${node.data('label')}`, "#0ff");
-
-                    cy.elements().addClass('faded').removeClass('highlight edge-highlight');
-                    neighborhood.removeClass('faded').addClass('highlight');
-                    node.connectedEdges().removeClass('faded').addClass('edge-highlight');
-                });
-
-                cy.on('tap', function(e){
-                    if( e.target === cy ){
-                        addLog("フォーカス解除", "#aaa");
-                        cy.elements().removeClass('faded highlight edge-highlight');
-                    }
-                });
-
-                addLog("準備完了。ノードは固定、クリックで直接の接続先を強調します。");
 
             } catch (err) {
-                addLog("エラー: " + err.message, "#f00");
+                console.error(err);
             }
         }
+
+        function resetSelection() {
+            cy.elements().removeClass('faded highlight-node edge-out edge-in edge-both');
+        }
+
         start();
     </script>
 </body>
