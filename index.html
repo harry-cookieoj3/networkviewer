@@ -227,8 +227,22 @@
         }
 
         function closePanel() { sidePanel.classList.remove('open'); }
-        function resetSelection() { closePanel(); cy.elements().removeClass('faded highlight-node edge-out edge-in'); searchInput.value = ''; adjustView(true); }
-
+        
+        function resetSelection() {
+            // 1. 現在ハイライトされている要素があるかチェック
+            const hasSelection = cy.elements('.highlight-node').length > 0;
+        
+            if (hasSelection) {
+                // 【ハイライト中】選択状態の解除のみ（視点は維持）
+                closePanel();
+                cy.elements().removeClass('faded highlight-node edge-out edge-in');
+                searchInput.value = '';
+            } else {
+                // 【通常時】全体表示に戻す
+                closePanel();
+                adjustView(true);
+            }
+        }
         window.addEventListener('resize', () => { adjustView(true); });
         start();
     </script>
