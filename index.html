@@ -183,29 +183,37 @@
         }
 
         function openPanel(data) {
+            console.log("選択されたデータ:", data); // ブラウザのコンソール(F12)でIDが来ているか確認用
+            
             document.getElementById('panel-title').innerText = data.label;
             const spotifyArea = document.getElementById('spotify-area');
             const linkArea = document.getElementById('link-area');
             
-            // 1. 先に外部リンク（Last.fm）を表示
-            linkArea.innerHTML = data.url_lastfm ? `<a href="${data.url_lastfm}" target="_blank" class="lastfm-btn">Last.fm で詳しく見る</a>` : '';
+            // 1. Last.fm リンク (上)
+            linkArea.innerHTML = data.url_lastfm 
+                ? `<a href="${data.url_lastfm}" target="_blank" class="lastfm-btn" style="margin-bottom:15px; display:block;">Last.fm で詳しく見る</a>` 
+                : '<p style="color:#999; font-size:12px;">Last.fm情報なし</p>';
         
-            // 2. 次にSpotify埋め込みを表示（URLを修正）
-            if (data.spotify_id) {
-                // IDが「spotify:artist:xxx」形式でも「xxx」形式でも対応できるように整形
-                const cleanId = data.spotify_id.replace('spotify:artist:', '');
+            // 2. Spotify プレイヤー (下)
+            if (data.spotify_id && data.spotify_id !== "") {
+                // IDから余計な接頭辞を削除（念のため）
+                const cleanId = String(data.spotify_id).replace('spotify:artist:', '').trim();
+                
+                // Spotify公式の埋め込みURL
+                const embedUrl = `https://open.spotify.com/embed/artist/${cleanId}?utm_source=generator`;
+                
                 spotifyArea.innerHTML = `
                     <iframe 
-                        src="https://open.spotify.com/embed/artist/${cleanId}?utm_source=generator" 
+                        src="${embedUrl}" 
                         width="100%" 
                         height="152" 
                         frameborder="0" 
-                        allowfullscreen="" 
                         allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+                        style="border-radius:12px;"
                         loading="lazy">
                     </iframe>`;
             } else {
-                spotifyArea.innerHTML = `<p style="padding: 20px; color: #666; font-size: 14px;">Spotify IDが未登録です</p>`;
+                spotifyArea.innerHTML = `<div style="padding: 20px; background: #f0f0f0; border-radius: 12px; color: #666; text-align: center; font-size: 13px;">Spotify IDが未登録、または読み込めませんでした</div>`;
             }
             
             sidePanel.classList.add('open');
