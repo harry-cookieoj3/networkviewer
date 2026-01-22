@@ -109,11 +109,13 @@
                 // Edge作成 (不整合ガード付)
                 const nodeIds = new Set(fullData.nodes.map(n => String(n.id)));
                 fullData.edges.forEach(e => {
-                    if (nodeIds.has(String(e.source)) && nodeIds.has(String(e.target))) {
-                        elements.push({ group: 'edges', data: { source: String(e.source), target: String(e.target) } });
+                    const s = String(e.source);
+                    const t = String(e.target);
+                    // SourceとTargetが同じ（自己ループ）でない、かつ両方のノードが存在する場合のみ
+                    if (s !== t && nodeIds.has(s) && nodeIds.has(t)) {
+                        elements.push({ group: 'edges', data: { source: s, target: t } });
                     }
                 });
-
                 cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
@@ -143,22 +145,43 @@
                     selectNode(e.target);
                 });
 
-                // 検索機能の実装
+                // 検索機能の実装// --- 修正版：検索機能の実装 ---
                 searchInput.addEventListener('input', (e) => {
                     const val = e.target.value.toLowerCase();
                     searchResults.innerHTML = '';
-                    if (!val) { searchResults.style.display = 'none'; return; }
-
-                    const matches = cy.nodes().filter(n => n.data('label').toLowerCase().includes(val));
+                    
+                    if (!val) { 
+                        searchResults.style.display = 'none'; 
+                        return; 
+                    }
+                
+                    // labelが存在し、かつ文字列であるノードだけを対象にする
+                    const matches = cy.nodes().filter(n => {
+                        const label = n.data('label');
+                        if (label && typeof label === 'string') {
+                            return label.toLowerCase().includes(val);
+                        }
+                        return false;
+                    });
+                
                     if (matches.length > 0) {
                         searchResults.style.display = 'block';
-                        matches.slice(0, 10).forEach(m => {
+                        matches.slice(0, 15).forEach(m => { // 少し件数を増やしました
                             const div = document.createElement('div');
                             div.className = 'search-item';
                             div.innerText = m.data('label');
-                            div.onclick = () => {
+                            
+                            // スマホやPCでの反応を確実にするため mousedown を使用
+                            div.onmousedown = (event) => {
+                                event.preventDefault(); // フォーカス移動を防ぐ
                                 selectNode(m);
-                                cy.animate({ center: { eles: m }, zoom: 0.05 }, { duration: 1000 });
+                                
+                                // そのノードへズームして移動
+                                cy.animate({
+                                    center: { eles: m },
+                                    zoom: 0.05
+                                }, { duration: 1000 });
+                                
                                 searchResults.style.display = 'none';
                                 searchInput.value = m.data('label');
                             };
