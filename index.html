@@ -8,107 +8,85 @@
     <style>
         body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #333; }
         #cy { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
-        
-        #ui-layer {
-            position: absolute; top: 15px; left: 15px; z-index: 100;
-            display: flex; flex-direction: column; gap: 8px; width: 280px;
+
+        /* UI基本設定 */
+        #top-ui {
+            position: absolute; top: 15px; left: 15px; right: 15px; z-index: 100;
+            display: flex; gap: 15px; pointer-events: none;
         }
 
-        .info-link {
-            display: inline-flex; align-items: center; gap: 6px;
-            color: #555; text-decoration: none; font-size: 13px; font-weight: bold;
-            margin-bottom: 2px; transition: 0.2s; width: fit-content;
+        #ui-layer { display: flex; flex-direction: column; gap: 8px; width: 280px; pointer-events: auto; }
+
+        /* 凡例レイヤー */
+        #legend-layer {
+            margin-left: auto; width: 220px; background: rgba(255, 255, 255, 0.9);
+            padding: 10px; border-radius: 8px; border: 1px solid #ccc;
+            max-height: 200px; overflow-y: auto; pointer-events: auto;
         }
-        .info-link:hover { color: #000; }
-        .info-icon { 
-            width: 18px; height: 18px; background: #333; color: #fff; 
-            border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px;
-        }
+        .legend-title { font-size: 12px; font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid #eee; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 4px; cursor: pointer; }
+        .legend-item input { cursor: pointer; }
+
+        /* 既存パーツ */
+        .info-link { display: inline-flex; align-items: center; gap: 6px; color: #555; text-decoration: none; font-size: 13px; font-weight: bold; transition: 0.2s; width: fit-content; }
+        .info-icon { width: 18px; height: 18px; background: #333; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; }
 
         .search-container { position: relative; }
-        #node-search {
-            width: 100%; padding: 12px; border: 2px solid #333; border-radius: 8px; font-size: 16px; box-sizing: border-box; outline: none;
-            background: rgba(255, 255, 255, 0.9);
-        }
-        #search-results {
-            position: absolute; top: 100%; left: 0; width: 100%; background: #fff; border: 1px solid #ccc; max-height: 200px; overflow-y: auto; display: none; z-index: 101; border-radius: 0 0 8px 8px;
-        }
+        #node-search { width: 100%; padding: 10px; border: 2px solid #333; border-radius: 8px; font-size: 14px; box-sizing: border-box; outline: none; background: rgba(255, 255, 255, 0.9); }
+        #search-results { position: absolute; top: 100%; left: 0; width: 100%; background: #fff; border: 1px solid #ccc; max-height: 200px; overflow-y: auto; display: none; z-index: 101; border-radius: 0 0 8px 8px; }
         .search-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; }
         .search-item:hover { background: #f0f0f0; }
 
-        .btn { padding: 10px; background: #333; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        .btn:hover { background: #000; }
+        .btn { padding: 8px; background: #333; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 12px; }
 
-        /* サイドパネル基本設定 (PC) */
-        #side-panel {
-            position: absolute; right: -400px; top: 0; width: 350px; height: calc(100% - 100px);
-            background: rgba(255, 255, 255, 0.98); box-shadow: -5px 0 15px rgba(0,0,0,0.1);
-            z-index: 200; transition: 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-            padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 15px; overflow-y: auto;
-        }
+        #side-panel { position: absolute; right: -400px; top: 0; width: 350px; height: calc(100% - 100px); background: rgba(255, 255, 255, 0.98); box-shadow: -5px 0 15px rgba(0,0,0,0.1); z-index: 200; transition: 0.4s; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
         #side-panel.open { right: 0; }
-        .panel-close { align-self: flex-end; cursor: pointer; font-size: 24px; font-weight: bold; color: #999; }
-        
-        /* ボタンコンテナ (PC/スマホ共通) */
-        .button-container { display: flex; gap: 10px; margin-top: 10px; width: 100%; }
-        
-        .play-this-btn { 
-            flex: 1; display: flex; align-items: center; justify-content: center;
-            background: #1DB954; color: white; text-decoration: none; border-radius: 8px; 
-            font-weight: bold; cursor: pointer; border: none; font-size: 14px; transition: 0.2s; min-height: 44px;
-        }
-        .play-this-btn:hover { background: #1ed760; }
-        
-        .lastfm-btn { 
-            flex: 1; display: flex; align-items: center; justify-content: center;
-            background: #ba0000; color: white; text-decoration: none; border-radius: 8px; 
-            font-size: 14px; font-weight: bold; min-height: 44px;
-        }
+        .panel-close { align-self: flex-end; cursor: pointer; font-size: 24px; color: #999; }
 
-        #fixed-player {
-            position: absolute; bottom: 15px; right: 15px; width: 350px; min-height: 80px;
-            z-index: 300; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-            overflow: hidden; display: none;
-        }
-        #fixed-player.visible { display: block; animation: slideIn 0.3s ease-out; }
+        .button-container { display: flex; gap: 10px; margin-top: 10px; }
+        .play-this-btn { flex: 1; display: flex; align-items: center; justify-content: center; background: #1DB954; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; min-height: 44px; border: none; cursor: pointer; }
+        .lastfm-btn { flex: 1; display: flex; align-items: center; justify-content: center; background: #ba0000; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; min-height: 44px; }
 
-        @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        #fixed-player { position: absolute; bottom: 15px; right: 15px; width: 350px; min-height: 80px; z-index: 300; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); overflow: hidden; display: none; }
+        #fixed-player.visible { display: block; }
 
-        /* スマホ専用の微調整 */
+        /* スマホ専用レイアウト */
         @media screen and (max-width: 768px) {
-            #side-panel {
-                right: 15px; left: 15px; bottom: -100%; top: auto;
-                width: calc(100% - 30px); height: auto; max-height: 30vh;
-                border-radius: 12px; padding: 15px;
-            }
+            #top-ui { gap: 10px; padding: 10px; top: 10px; left: 10px; right: 10px; }
+            #ui-layer { width: 50%; }
+            #legend-layer { width: 50%; margin-left: 0; max-height: 120px; }
+            #side-panel { right: 10px; left: 10px; bottom: -100%; top: auto; width: calc(100% - 20px); height: auto; max-height: 40vh; }
             #side-panel.open { bottom: 100px; }
-            #panel-title { font-size: 18px !important; }
-            .button-container { gap: 8px; }
-            .play-this-btn, .lastfm-btn { font-size: 13px !important; padding: 8px 4px !important; }
-            #fixed-player { width: calc(100% - 30px); left: 15px; bottom: 10px; }
+            #fixed-player { width: calc(100% - 20px); left: 10px; bottom: 10px; }
         }
-        
-        #status-log { position: absolute; bottom: 5px; left: 5px; z-index: 100; background: rgba(0,0,0,0.6); color: #0f0; padding: 5px 10px; font-size: 10px; border-radius: 3px; pointer-events: none; }
+        #status-log { position: absolute; bottom: 5px; left: 5px; z-index: 100; background: rgba(0,0,0,0.6); color: #0f0; padding: 2px 8px; font-size: 9px; border-radius: 3px; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <div id="ui-layer">
-        <a href="https://note.com/ready_yucca1038/n/n7ee11797c256?sub_rt=share_pw" target="_blank" class="info-link">
-            <span class="info-icon">?</span> このアプリについて
-        </a>
-        <div class="search-container">
-            <input type="text" id="node-search" placeholder="アーティスト検索..." autocomplete="off">
-            <div id="search-results"></div>
+    <div id="top-ui">
+        <div id="ui-layer">
+            <a href="https://note.com/ready_yucca1038/n/n7ee11797c256" target="_blank" class="info-link">
+                <span class="info-icon">?</span> アプリについて
+            </a>
+            <div class="search-container">
+                <input type="text" id="node-search" placeholder="アーティスト検索..." autocomplete="off">
+                <div id="search-results"></div>
+            </div>
+            <button class="btn" onclick="resetSelection()">全体を表示 / 解除</button>
         </div>
-        <button class="btn" onclick="resetSelection()">全体を表示 / 解除</button>
+        <div id="legend-layer">
+            <div class="legend-title">領域表示</div>
+            <div id="legend-items"></div>
+        </div>
     </div>
 
     <div id="side-panel">
         <span class="panel-close" onclick="closePanel()">×</span>
-        <h2 id="panel-title" style="margin: 0; font-size: 24px;">Artist Name</h2>
+        <h2 id="panel-title" style="margin: 0; font-size: 20px;">Artist Name</h2>
         <div id="play-btn-area"></div>
-        <div id="link-area"></div> </div>
+        <div id="link-area"></div>
+    </div>
 
     <div id="fixed-player">
         <div id="spotify-container"></div>
@@ -119,37 +97,56 @@
 
     <script>
         let cy;
-        const logEl = document.getElementById('status-log');
-        const searchInput = document.getElementById('node-search');
-        const searchResults = document.getElementById('search-results');
-        const sidePanel = document.getElementById('side-panel');
-        const fixedPlayer = document.getElementById('fixed-player');
-
         const CONFIG = {
-            gasUrl: "https://script.google.com/macros/s/AKfycbxLSa95r08HRbuQhEWUgVSUSeSaUmJxpA8fRZ4NVAbiGLhVA3kFkEdbEVIvlr2HWcAn/exec", 
+            gasUrl: "https://script.google.com/macros/s/AKfycbxLSa95r08HRbuQhEWUgVSUSeSaUmJxpA8fRZ4NVAbiGLhVA3kFkEdbEVIvlr2HWcAn/exec",
             token: "my-secret-token-2026",
-            baseNodeSize: 225, baseFontSize: 1500, edgeWidth: 35
+            baseNodeSize: 225, baseFontSize: 1500, edgeWidth: 35, areaFontSize: 5000
         };
 
-        function addLog(msg) { logEl.innerText = msg; }
+        const AREA_DATA = [
+            {"modId": 0, "label": "シンプルステージ", "color": "#0dff19", "defaultVisible": false, "geometry": {"center": {"x": 28132.5, "y": -36667}, "width": 164013, "height": 133658}},
+            {"modId": 1, "label": "＜楽曲派＞", "color": "#ffff30", "defaultVisible": false, "geometry": {"center": {"x": 58164, "y": 53795.5}, "width": 164908, "height": 176427}},
+            {"modId": 2, "label": "熱狂・湧き勢", "color": "#ff5273", "defaultVisible": false, "geometry": {"center": {"x": -42841, "y": -74058}, "width": 87038, "height": 90302}},
+            {"modId": 3, "label": "ヒロイン・シンパシー", "color": "#ff8642", "defaultVisible": false, "geometry": {"center": {"x": 36123.5, "y": 9558}, "width": 231117, "height": 214548}},
+            {"modId": 4, "label": "王道派", "color": "#7de7ff", "defaultVisible": true, "geometry": {"center": {"x": -19547, "y": 18570}, "width": 168904, "height": 136914}},
+            {"modId": 16, "label": "天上界", "color": "#ff0b22", "defaultVisible": false, "geometry": {"center": {"x": -34807, "y": 122951.5}, "width": 134128, "height": 161771}},
+            {"modId": 18, "label": "ベテラン", "color": "#969696", "defaultVisible": false, "geometry": {"center": {"x": -16375.5, "y": 76288}, "width": 129145, "height": 97018}}
+        ];
 
-        function adjustView(animate = true) {
-            if (!cy) return;
-            const isMobile = window.innerWidth < 768;
-            cy.animate({ fit: { eles: cy.elements(), padding: isMobile ? 30 : 60 } }, { duration: animate ? 600 : 0 });
-        }
+        function addLog(msg) { document.getElementById('status-log').innerText = msg; }
 
         async function start() {
             addLog("データ取得中...");
             try {
                 const response = await fetch(`${CONFIG.gasUrl}?token=${CONFIG.token}`, { redirect: 'follow' });
                 const fullData = await response.json();
-
                 const elements = [];
+
+                // 領域ノードの追加
+                AREA_DATA.forEach(a => {
+                    if (!a.label || a.label.startsWith("Cluster")) return;
+                    elements.push({
+                        group: 'nodes',
+                        classes: 'area-node',
+                        data: {
+                            id: 'area-' + a.modId, label: a.label, color: a.color,
+                            width: a.geometry.width, height: a.geometry.height,
+                            visible: a.defaultVisible ? 'yes' : 'no'
+                        },
+                        position: { x: a.geometry.center.x, y: -a.geometry.center.y },
+                        selectable: false, grabbable: false
+                    });
+                });
+
+                // アーティストノードの追加
                 fullData.nodes.forEach(n => {
                     elements.push({
                         group: 'nodes',
-                        data: { id: String(n.id), label: n.label, color: n.color, size: parseFloat(n.size) * CONFIG.baseNodeSize, spotify_id: n.spotify_id, url_lastfm: n.url_lastfm },
+                        data: {
+                            id: String(n.id), label: n.label, color: n.color,
+                            size: parseFloat(n.size) * CONFIG.baseNodeSize,
+                            spotify_id: n.spotify_id, url_lastfm: n.url_lastfm
+                        },
                         position: { x: parseFloat(n.x), y: -parseFloat(n.y) }
                     });
                 });
@@ -165,11 +162,12 @@
                 cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
-                    minZoom: 0.001, maxZoom: 0.1,
-                    autoungrabify: true,
+                    minZoom: 0.001, maxZoom: 0.2,
                     style: [
-                        { selector: 'node', style: { 'width': 'data(size)', 'height': 'data(size)', 'label': 'data(label)', 'font-size': CONFIG.baseFontSize, 'background-color': 'data(color)', 'text-outline-width': 20, 'text-outline-color': '#fff' }},
-                        { selector: 'edge', style: { 'width': CONFIG.edgeWidth, 'line-color': '#ccc', 'opacity': 0.2, 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'target-arrow-color': '#ccc' }},
+                        { selector: 'node', style: { 'width': 'data(size)', 'height': 'data(size)', 'label': 'data(label)', 'font-size': CONFIG.baseFontSize, 'background-color': 'data(color)', 'text-outline-width': 20, 'text-outline-color': '#fff', 'z-index': 10 }},
+                        { selector: '.area-node', style: { 'shape': 'ellipse', 'width': 'data(width)', 'height': 'data(height)', 'label': 'data(label)', 'font-size': CONFIG.areaFontSize, 'background-color': 'data(color)', 'background-opacity': 0.15, 'border-width': 400, 'border-color': 'data(color)', 'text-valign': 'center', 'color': 'data(color)', 'text-opacity': 0.8, 'z-index': 1, 'events': 'no' }},
+                        { selector: '.area-node[visible="no"]', style: { 'display': 'none' }},
+                        { selector: 'edge', style: { 'width': CONFIG.edgeWidth, 'line-color': '#ccc', 'opacity': 0.2, 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'target-arrow-color': '#ccc', 'z-index': 5 }},
                         { selector: '.faded', style: { 'opacity': 0.05, 'text-opacity': 0 }},
                         { selector: '.highlight-node', style: { 'z-index': 999, 'border-width': 60, 'border-color': '#000' }},
                         { selector: '.edge-out', style: { 'line-color': 'red', 'target-arrow-color': 'red', 'opacity': 1 }},
@@ -178,45 +176,80 @@
                     layout: { name: 'preset' }
                 });
 
-                // タップ時にハイライトとパネル表示を実行
-                cy.on('tap', 'node', function(e){ 
-                    selectNode(e.target); 
-                    openPanel(e.target.data()); 
-                });
-
-                searchInput.addEventListener('input', (e) => {
-                    const val = e.target.value.toLowerCase();
-                    searchResults.innerHTML = '';
-                    if (!val) { searchResults.style.display = 'none'; return; }
-                    const matches = cy.nodes().filter(n => {
-                        const lbl = n.data('label');
-                        return lbl && typeof lbl === 'string' && lbl.toLowerCase().includes(val);
-                    });
-                    if (matches.length > 0) {
-                        searchResults.style.display = 'block';
-                        matches.slice(0, 10).forEach(m => {
-                            const div = document.createElement('div');
-                            div.className = 'search-item'; div.innerText = m.data('label');
-                            div.onmousedown = (ev) => {
-                                ev.preventDefault();
-                                selectNode(m); 
-                                openPanel(m.data());
-                                cy.animate({ center: { eles: m }, zoom: 0.02 }, { duration: 1000 });
-                                searchResults.style.display = 'none'; searchInput.value = m.data('label');
-                            };
-                            searchResults.appendChild(div);
-                        });
-                    } else { searchResults.style.display = 'none'; }
-                });
-
-                adjustView(false);
+                initUI();
                 addLog(`描画完了: ${fullData.nodes.length} nodes`);
             } catch (err) { addLog("Error: " + err.message); }
         }
 
+        function initUI() {
+            // 凡例生成
+            const container = document.getElementById('legend-items');
+            AREA_DATA.forEach(a => {
+                if (!a.label || a.label.startsWith("Cluster")) return;
+                const item = document.createElement('label');
+                item.className = 'legend-item';
+                item.innerHTML = `<input type="checkbox" ${a.defaultVisible ? 'checked' : ''} onchange="toggleArea(${a.modId}, this.checked)"> <span style="color:${a.color}">■</span> ${a.label}`;
+                container.appendChild(item);
+            });
+
+            cy.on('tap', 'node', (e) => {
+                if (e.target.hasClass('area-node')) return;
+                selectNode(e.target);
+                openPanel(e.target.data());
+            });
+
+            document.getElementById('node-search').addEventListener('input', handleSearch);
+            adjustView(false);
+        }
+
+        function toggleArea(modId, isVisible) {
+            const area = cy.$(`#area-${modId}`);
+            area.data('visible', isVisible ? 'yes' : 'no');
+        }
+        function handleSearch(e) {
+            const val = e.target.value.toLowerCase();
+            const results = document.getElementById('search-results');
+            results.innerHTML = '';
+
+            if (!val) {
+                results.style.display = 'none';
+                return;
+            }
+
+            // 文字列チェックを厳密に行うように修正
+            const matches = cy.nodes().filter(n => {
+                // 領域ノードは検索対象から除外
+                if (n.hasClass('area-node')) return false;
+
+                const lbl = n.data('label');
+                // ラベルが存在し、かつ文字列であることを確認してから比較
+                return lbl && typeof lbl === 'string' && lbl.toLowerCase().includes(val);
+            });
+
+            if (matches.length > 0) {
+                results.style.display = 'block';
+                matches.slice(0, 10).forEach(m => {
+                    const div = document.createElement('div');
+                    div.className = 'search-item';
+                    div.innerText = m.data('label');
+                    div.onmousedown = (ev) => {
+                        ev.preventDefault();
+                        selectNode(m);
+                        openPanel(m.data());
+                        cy.animate({ center: { eles: m }, zoom: 0.01 }, { duration: 800 });
+                        results.style.display = 'none';
+                        document.getElementById('node-search').value = m.data('label');
+                    };
+                    results.appendChild(div);
+                });
+            } else {
+                results.style.display = 'none';
+            }
+        }
+
         function selectNode(node) {
             const id = node.id();
-            cy.elements().addClass('faded').removeClass('highlight-node edge-out edge-in');
+            cy.elements().not('.area-node').addClass('faded').removeClass('highlight-node edge-out edge-in');
             node.removeClass('faded').addClass('highlight-node');
             node.connectedEdges().forEach(edge => {
                 edge.removeClass('faded');
@@ -225,48 +258,43 @@
             });
             node.neighborhood().nodes().removeClass('faded');
         }
-        
+
         function openPanel(data) {
             document.getElementById('panel-title').innerText = data.label;
-            let html = '<div class="button-container">';
-            
-            if (data.spotify_id && data.spotify_id.length > 10) {
-                const cleanId = String(data.spotify_id).replace('spotify:artist:', '').trim();
-                html += `<button class="play-this-btn" onclick="setPlayer('${cleanId}')">Spotifyで聴く</button>`;
+            const spotifyId = data.spotify_id ? String(data.spotify_id).replace('spotify:artist:', '').trim() : null;
+            let html = `<div class="button-container">`;
+            if (spotifyId && spotifyId.length > 10) {
+                html += `<button class="play-this-btn" onclick="setPlayer('${spotifyId}')">Spotifyで聴く</button>`;
             } else {
                 html += `<button class="play-this-btn" style="background:#ccc; cursor:not-allowed;" disabled>再生不可</button>`;
             }
-            
-            if (data.url_lastfm) {
-                html += `<a href="${data.url_lastfm}" target="_blank" class="lastfm-btn">Last.fm 詳細</a>`;
-            }
-            html += '</div>';
-            
+            if (data.url_lastfm) html += `<a href="${data.url_lastfm}" target="_blank" class="lastfm-btn">Last.fm</a>`;
+            html += `</div>`;
             document.getElementById('play-btn-area').innerHTML = html;
-            document.getElementById('link-area').innerHTML = '';
-            sidePanel.classList.add('open');
-        }
-          
-        function setPlayer(id) {
-            const container = document.getElementById('spotify-container');
-            container.innerHTML = `<iframe src="https://open.spotify.com/embed/artist/${id}?utm_source=generator" width="100%" height="80" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>`;
-            fixedPlayer.classList.add('visible');
+            document.getElementById('side-panel').classList.add('open');
         }
 
-        function closePanel() { sidePanel.classList.remove('open'); }
-        
-        function resetSelection() {
-            const hasSelection = cy.elements('.highlight-node').length > 0;
-            if (hasSelection) {
-                closePanel();
-                cy.elements().removeClass('faded highlight-node edge-out edge-in');
-                searchInput.value = '';
-            } else {
-                closePanel();
-                adjustView(true);
-            }
+        function setPlayer(id) {
+            document.getElementById('spotify-container').innerHTML = `<iframe src="https://open.spotify.com/embed/artist/${id}?utm_source=generator" width="100%" height="80" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>`;
+            document.getElementById('fixed-player').classList.add('visible');
         }
-        window.addEventListener('resize', () => { adjustView(true); });
+
+        function closePanel() { document.getElementById('side-panel').classList.remove('open'); }
+
+        function resetSelection() {
+            closePanel();
+            cy.elements().removeClass('faded highlight-node edge-out edge-in');
+            document.getElementById('node-search').value = '';
+            adjustView(true);
+        }
+
+        function adjustView(animate = true) {
+            if (!cy) return;
+            const isMobile = window.innerWidth < 768;
+            cy.animate({ fit: { eles: cy.elements().not('.area-node'), padding: isMobile ? 20 : 50 } }, { duration: animate ? 600 : 0 });
+        }
+
+        window.addEventListener('resize', () => adjustView(true));
         start();
     </script>
 </body>
